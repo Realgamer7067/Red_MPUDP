@@ -57,12 +57,14 @@ Minimum kernel **5.15**; release matrix in
 
 ## Assigned to the M02 Phase 0 stop/go decision
 
-### D-P0-1 — v1 transport: custom UDP + Noise vs QUIC DATAGRAM (design D2 vs D12)
-The design specifies `Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s` over plain UDP
-(D2) and keeps QUIC DATAGRAM (RFC 9221) as an alternate that must first pass
-the Phase 0 benchmark (D12). `plan:SPIKE-49`..`plan:SPIKE-66` produce
-`docs/decisions/0001-v1-transport.md`. If the selection changes D2 or D12 the
-design is updated (`plan:SPIKE-65`).
+### D-P0-1 — v1 transport — RESOLVED (2026-09-03)
+**Custom UDP + `Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s` (D2).** QUIC DATAGRAM
+rejected on three independent blockers (no pre-send max-size, no per-datagram
+delivery feedback, uncontrollable 32-frame blocking queue) plus ~7× per-datagram
+overhead — `plan:SPIKE-59`. Decision record:
+`docs/decisions/0001-v1-transport.md` (Accepted). D2/D12 unchanged; spec at
+revision 4 with the §9.5 TODO(M17) note. Evidence retained under
+`experiments/quicdatagram/`.
 
 ### D-P0-2 — Explicit-nonce out-of-order safety with the chosen Noise library
 Whether the selected Go Noise package exposes IKpsk2 **and** explicit
@@ -93,11 +95,11 @@ not a blocker.
 - SPIKE-42..45 (additive increase, once-per-RTT halving, stale-feedback
   collapse, 2-round delay cut) all pass exactly.
 
-**Carried to D-P0-1 / the transport decision (`plan:SPIKE-60..66`)** with three
-options: (1) accept yielding as correct for a latency VPN and reword the §17.4
-Jain gate, (2) add a bounded loss-driven increase path (design change), or
-(3) reopen toward QUIC DATAGRAM. This makes the **QUIC spike load-bearing.**
-Must be re-checked against real `tc netem` at `plan:CC-FAIR-*` (M17).
+**Sign-off (2026-09-03): accepted as a known limitation, deferred to M17.**
+Recorded in spec §9.5 (TODO(M17)) and `docs/decisions/0001-v1-transport.md`.
+M17 adds a bounded loss-driven additive-increase path (keeping the delay-gated
+increase primary) and verifies it against real `tc netem` at `plan:CC-FAIR-*`.
+Does not block M03–M16. **Still open, owned by M17.**
 
 ### D-P0-5 — Frozen default values
 Queue sizes, replica budgets, pacing rates, probe/report intervals, and the

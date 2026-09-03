@@ -1,9 +1,10 @@
 # 0001 — v1 transport
 
-**Status:** Proposed — awaiting sign-off on the M02 Phase 0 gate
+**Status:** Accepted (M02 Phase 0 gate signed off 2026-09-03)
 **Date:** 2026-09-03
 **Deciders:** malharrajpara28@gmail.com
 **Supersedes / relates to:** design D2, D12; `open-decisions.md` D-P0-1..D-P0-4
+**Design:** recorded in spec revision 4; §9.5 carries the TODO(M17) fairness note
 
 ## Context
 
@@ -90,8 +91,11 @@ under `experiments/quicdatagram/`.
 | Selected approach meets the fairness threshold | **CONDITIONAL** — anti-flood floor passes everywhere; Jain ≥ 0.90 only for buffers ≲ 20 ms; the delay-gated controller yields (does not starve) on bloated buffers |
 
 The fairness gate is not cleanly met by the design §9.5 controller **as
-written**. Because QUIC is rejected on independent grounds, the path forward is
-to **revise the controller**, not the transport:
+written**. **Sign-off decision (2026-09-03): accept the conditional pass and
+defer the controller change to M17** — it is recorded as a known limitation in
+spec §9.5 (TODO(M17)) and does not block M03–M16. Because QUIC is rejected on
+independent grounds, the path forward is to **revise the controller**, not the
+transport:
 
 - **Design change (§9.5):** add a bounded loss-driven additive-increase path so
   the controller stays competitive with loss-based TCP on bloated buffers, at a
@@ -107,9 +111,9 @@ security model, and does not block M03–M16.
 ## Design updates (SPIKE-65)
 
 - **D2, D12: unchanged.** The selection matches the design; no edit.
-- **§9.5: to be revised** with the bounded loss-driven increase before M17. A
-  `TODO(M17)` marker and a pointer to this record will be added to §9.5 in the
-  same commit that records this decision.
+- **§9.5: `TODO(M17)` note added** (spec revision 4) — a pointer to this record
+  and the fairness finding, and the commitment to add a bounded loss-driven
+  increase before M17. The normative controller text is unchanged for now.
 
 ## Consequences
 

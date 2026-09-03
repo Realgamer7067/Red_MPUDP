@@ -2,9 +2,12 @@
 
 **Status:** Implementation-ready v1 design draft
 **Date:** 2026-09-02
-**Revision:** 3 — renamed RED_MCUDP → RED_MPUDP, including the 4-byte wire
-magic (`RMCU` → `RMPU`), the Noise prologue, and the HKDF label strings;
-revision 2 completed security, congestion, routing, PMTU, and the test plan
+**Revision:** 4 — recorded the M02 Phase 0 transport decision (custom UDP +
+Noise upheld; QUIC DATAGRAM rejected — see `docs/decisions/0001-v1-transport.md`)
+and added the §9.5 TODO(M17) fairness note. Revision 3 renamed RED_MCUDP →
+RED_MPUDP including the 4-byte wire magic (`RMCU` → `RMPU`), the Noise prologue,
+and the HKDF label strings; revision 2 completed security, congestion, routing,
+PMTU, and the test plan
 **Author:** malharrajpara28@gmail.com
 
 ## 1. Purpose
@@ -905,6 +908,20 @@ in the Phase 0/6 netem tests. If it cannot meet the congestion, fairness, and
 latency gates, the transport decision is reopened in favor of an established
 congestion-controlled datagram transport; shipping an unpaced custom UDP data
 plane is not an option.
+
+> **TODO(M17) — Phase 0 fairness finding.** The Phase 0 simulation
+> (`docs/decisions/0001-v1-transport.md`, `open-decisions.md` D-P0-4,
+> `test/results/phase0/congestion-*`) confirmed this controller never starves a
+> competing TCP flow (native TCP keeps well over the 35% floor at every buffer
+> depth), but the two-flow Jain index stays ≥ 0.90 only for drop-tail buffers
+> up to roughly the 15 ms queue-delay target: on bloated buffers the
+> delay-gated additive increase stops firing and the controller *yields* to
+> loss-based TCP. Before M17 this section gains a **bounded loss-driven
+> additive-increase path** so the controller stays competitive on bloated
+> buffers at a bounded, measured latency cost, keeping the delay-gated increase
+> as the primary mode; the `plan:CC-FAIR-*` netem tests then verify it against
+> the release thresholds. The v1 transport (custom UDP + Noise) is not reopened
+> for this: QUIC DATAGRAM was rejected on independent grounds (SPIKE-59).
 
 ## 10. Path MTU
 
