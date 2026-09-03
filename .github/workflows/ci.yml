@@ -8,8 +8,11 @@ on:
 permissions:
   contents: read
 
-# actions/setup-go@v5 caches the build/module cache with a key that already
-# includes the Go version and a hash of go.sum (BOOT-21).
+# BOOT-21: setup-go@v5 caches the build/module cache keyed on the Go version
+# and a hash of the file named by cache-dependency-path. The repo has no go.sum
+# yet (no dependencies), and the action's default (go.sum) would skip caching
+# with a warning when the file is absent -- so we key on go.mod explicitly.
+# Add go.sum to the path once M02 introduces the first dependency.
 
 jobs:
   vet:
@@ -19,6 +22,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.mod
       - run: gofmt -l . | tee /tmp/gofmt.out
       - name: fail on unformatted files
         run: test ! -s /tmp/gofmt.out
@@ -31,6 +35,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.mod
       - run: make test-unit
       - run: make test-fuzz-smoke
 
@@ -41,6 +46,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.mod
       - run: make test-race
 
   build:
@@ -52,6 +58,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.mod
       - run: make build
       - uses: actions/upload-artifact@v4
         with:

@@ -3,14 +3,16 @@
 ## Go (LOCK-04)
 
 - **Selected version: Go 1.27.**
-- `go.mod` pins `go 1.27`; CI runs `go-version: '1.27'` and also honours
-  `go-version-file: go.mod` so the two never drift.
+- `go.mod` pins the Go version; CI resolves it with
+  `go-version-file: go.mod` on every job, so the workflow and `go.mod` never
+  drift.
 - Rationale: 1.27 is the version installed on the development host
   (`go1.27.0 linux/amd64`) and the current stable release as of 2026-09.
   No language or standard-library feature below 1.27 is required; the pin is
   a floor, not a ceiling.
-- Bumping the pin is a deliberate change: update `go.mod`, the CI workflows,
-  and this file in the same commit, and re-run the full `make` target set.
+- Bumping the pin is a deliberate change: update the `go` directive in
+  `go.mod` and this file in the same commit (CI follows `go.mod`
+  automatically), and re-run the full `make` target set.
 
 ## Reproducible builds (BOOT-16)
 
