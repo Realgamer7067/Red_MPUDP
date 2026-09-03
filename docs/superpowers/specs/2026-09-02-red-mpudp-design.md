@@ -2,7 +2,9 @@
 
 **Status:** Implementation-ready v1 design draft
 **Date:** 2026-09-02
-**Revision:** 2 — security, congestion, routing, PMTU, and test plan completed
+**Revision:** 3 — renamed RED_MCUDP → RED_MPUDP, including the 4-byte wire
+magic (`RMCU` → `RMPU`), the Noise prologue, and the HKDF label strings;
+revision 2 completed security, congestion, routing, PMTU, and the test plan
 **Author:** malharrajpara28@gmail.com
 
 ## 1. Purpose
@@ -368,7 +370,7 @@ transport packets use a high version nibble of `1`, so the byte is `0x10` throug
 Handshake packets are not transport packets and do not use a session key.
 
 ```text
-magic[4]       = "RMCU"
+magic[4]       = "RMPU"
 version        u8 = 1
 type           u8 = INIT | RESPONSE | RETRY
 flags          u16 = 0
@@ -451,7 +453,7 @@ Every established-path datagram is:
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +---------------------------------------------------------------+
-|                         magic = "RMCU"                        |
+|                         magic = "RMPU"                        |
 +---------------+---------------+-------------------------------+
 | ver(4)|type(4)|     flags     |         header_len = 44       |
 +---------------------------------------------------------------+

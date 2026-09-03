@@ -864,7 +864,7 @@ logic depends on them.
 ### Constants and errors
 
 - [ ] **WIRE-01:** Create `internal/wire/constants.go`.
-- [ ] **WIRE-02:** Define magic bytes `RMCU`.
+- [ ] **WIRE-02:** Define magic bytes `RMPU`.
 - [ ] **WIRE-03:** Define handshake version byte `0x01`.
 - [ ] **WIRE-04:** Define transport version nibble `1`.
 - [ ] **WIRE-05:** Define handshake type values INIT 1, RESPONSE 2, RETRY 3.
