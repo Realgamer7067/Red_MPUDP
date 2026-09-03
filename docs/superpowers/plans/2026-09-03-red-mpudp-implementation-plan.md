@@ -502,11 +502,11 @@ Create a deterministic, recoverable place to exercise privileged networking.
 
 ### Namespace harness
 
-- [ ] **HARNESS-01:** Create `test/integration/preflight_linux_test.go`.
-- [ ] **HARNESS-02:** Detect Linux before running privileged tests.
-- [ ] **HARNESS-03:** Detect effective `CAP_NET_ADMIN`.
-- [ ] **HARNESS-04:** Detect availability of `ip`, `tc`, and `nft` test tools.
-- [ ] **HARNESS-05:** Skip with one precise reason when prerequisites are absent.
+- [x] **HARNESS-01:** Create `test/integration/preflight_linux_test.go`.
+- [x] **HARNESS-02:** Detect Linux before running privileged tests.
+- [x] **HARNESS-03:** Detect effective `CAP_NET_ADMIN`.
+- [x] **HARNESS-04:** Detect availability of `ip`, `tc`, and `nft` test tools.
+- [x] **HARNESS-05:** Skip with one precise reason when prerequisites are absent.
 - [ ] **HARNESS-06:** Create unique namespace names per test process.
 - [ ] **HARNESS-07:** Create `client-ns`.
 - [ ] **HARNESS-08:** Create `server-ns`.
@@ -540,41 +540,71 @@ Create a deterministic, recoverable place to exercise privileged networking.
 
 ### Mutation journal
 
-- [ ] **JOURNAL-01:** Create `internal/journal/schema.go` with schema version,
+- [x] **JOURNAL-01:** Create `internal/journal/schema.go` with schema version,
   role, instance ID, and owned-resource records.
-- [ ] **JOURNAL-02:** Exclude all key, PSK, join-token, and packet fields from
+- [x] **JOURNAL-02:** Exclude all key, PSK, join-token, and packet fields from
   the journal schema.
-- [ ] **JOURNAL-03:** Create the runtime directory with restrictive ownership.
-- [ ] **JOURNAL-04:** Write journals to a temporary file in the same directory.
-- [ ] **JOURNAL-05:** Set journal mode 0600 before writing content.
-- [ ] **JOURNAL-06:** Fsync the temporary journal.
-- [ ] **JOURNAL-07:** Atomically rename the temporary journal into place.
-- [ ] **JOURNAL-08:** Fsync the containing directory.
-- [ ] **JOURNAL-09:** Reject unsupported journal schema versions.
-- [ ] **JOURNAL-10:** Reject malformed resource identifiers.
-- [ ] **JOURNAL-11:** Reject a role/instance mismatch during recovery.
-- [ ] **JOURNAL-12:** Record prior sysctl values before changing them.
-- [ ] **JOURNAL-13:** Record prior resolver state before changing it.
-- [ ] **JOURNAL-14:** Record exact owned route/rule/table identifiers.
-- [ ] **JOURNAL-15:** Restore a sysctl only when its current value still equals
+- [x] **JOURNAL-03:** Create the runtime directory with restrictive ownership.
+- [x] **JOURNAL-04:** Write journals to a temporary file in the same directory.
+- [x] **JOURNAL-05:** Set journal mode 0600 before writing content.
+- [x] **JOURNAL-06:** Fsync the temporary journal.
+- [x] **JOURNAL-07:** Atomically rename the temporary journal into place.
+- [x] **JOURNAL-08:** Fsync the containing directory.
+- [x] **JOURNAL-09:** Reject unsupported journal schema versions.
+- [x] **JOURNAL-10:** Reject malformed resource identifiers.
+- [x] **JOURNAL-11:** Reject a role/instance mismatch during recovery.
+- [x] **JOURNAL-12:** Record prior sysctl values before changing them.
+- [x] **JOURNAL-13:** Record prior resolver state before changing it.
+- [x] **JOURNAL-14:** Record exact owned route/rule/table identifiers.
+- [x] **JOURNAL-15:** Restore a sysctl only when its current value still equals
   the value installed by RED_MPUDP.
-- [ ] **JOURNAL-16:** Preserve operator-modified sysctls and report a conflict.
-- [ ] **JOURNAL-17:** Remove only routes and rules with exact journal ownership.
-- [ ] **JOURNAL-18:** Remove only the exact named nftables table owned by the
+- [x] **JOURNAL-16:** Preserve operator-modified sysctls and report a conflict.
+- [x] **JOURNAL-17:** Remove only routes and rules with exact journal ownership.
+- [x] **JOURNAL-18:** Remove only the exact named nftables table owned by the
   instance.
-- [ ] **JOURNAL-19:** Make recovery idempotent.
-- [ ] **JOURNAL-20:** Make a second recovery invocation a no-op success.
-- [ ] **JOURNAL-21:** Add `cleanup --state-file` CLI parsing.
-- [ ] **JOURNAL-22:** Refuse cleanup when the journal is missing.
-- [ ] **JOURNAL-23:** Refuse cleanup when the journal is malformed.
+- [x] **JOURNAL-19:** Make recovery idempotent.
+- [x] **JOURNAL-20:** Make a second recovery invocation a no-op success.
+- [x] **JOURNAL-21:** Add `cleanup --state-file` CLI parsing.
+- [x] **JOURNAL-22:** Refuse cleanup when the journal is missing.
+- [x] **JOURNAL-23:** Refuse cleanup when the journal is malformed.
 - [ ] **JOURNAL-24:** Test recovery entirely inside a namespace.
+
+### Status (2026-09-03)
+
+Landed:
+
+- The full harness (`test/integration/`): unique per-process namespace names,
+  three namespaces, both veth paths + server uplink, deterministic subnets,
+  routes, `tc netem` delay/loss/duplication/reorder/rate helpers, link /
+  address / gateway mutation, per-test subprocess capture, and post-suite leak
+  detection. HARNESS-01..05 (preflight detection + precise skip) are verified
+  in this environment; HARNESS-06..34 are implemented but exercised only by
+  `TestTopologyLifecycle` / `TestFailedTestLeavesNoNamespace`, which **skip
+  here** for lack of `CAP_NET_ADMIN`.
+- The mutation journal (`internal/journal/`): schema + secret-free assertion,
+  atomic 0600 write (temp + fsync + rename + dir fsync), strict load
+  (schema-version, unknown-field, and identifier rejection), ownership check,
+  and idempotent `Recover` with the sysctl restore-only-if-unchanged /
+  preserve-and-report-conflict rule — all covered by unit tests against a fake
+  `Host`. `red-mpudp cleanup --state-file` parsing and its
+  missing/malformed/wrong-schema refusals (JOURNAL-21..23) are covered.
+  `LinuxHost` (real `ip`/`/proc/sys`/`nft`) is implemented but unexercised
+  here.
+
+Blocked on a privileged run (root + `ip`/`tc`/`nft`):
+
+- **JOURNAL-24** and the three gate boxes below. Run
+  `sudo -E env "PATH=$PATH" make test-integration` (or the `integration.yml`
+  workflow) and check them off once green.
 
 ### Gate
 
-- [ ] The topology can be created, impaired, and destroyed repeatedly.
-- [ ] A deliberately failed test leaves no namespace behind.
+- [ ] The topology can be created, impaired, and destroyed repeatedly. *(blocked: privileged run)*
+- [ ] A deliberately failed test leaves no namespace behind. *(blocked: privileged run)*
 - [ ] Journal recovery never removes an unrelated route, rule, nftables table,
-  resolver setting, or sysctl change.
+  resolver setting, or sysctl change. *(unit-proven against a fake host in
+  `TestRecoverTouchesOnlyOwnedResources`; end-to-end confirmation blocked on a
+  privileged run — JOURNAL-24)*
 
 ### Checkpoint
 

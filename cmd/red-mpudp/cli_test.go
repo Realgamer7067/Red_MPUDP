@@ -132,6 +132,39 @@ func TestCheckConfig(t *testing.T) {
 	}
 }
 
+// JOURNAL-21, JOURNAL-22, JOURNAL-23: cleanup parses --state-file and refuses a
+// missing or malformed journal.
+func TestCleanupRefusesBadJournal(t *testing.T) {
+	dir := t.TempDir()
+
+	if code, _, _ := exec("cleanup"); code != exitUsage {
+		t.Fatalf("cleanup with no flag: exit=%d", code)
+	}
+	if code, _, errs := exec("cleanup", "--state-file", filepath.Join(dir, "absent")); code != exitConfig {
+		t.Fatalf("cleanup missing journal: exit=%d (%s)", code, errs)
+	}
+	bad := filepath.Join(dir, "bad.journal")
+	os.WriteFile(bad, []byte("{ garbage"), 0o600)
+	if code, _, _ := exec("cleanup", "--state-file", bad); code != exitConfig {
+		t.Fatalf("cleanup malformed journal: exit=%d", code)
+	}
+	wrongSchema := filepath.Join(dir, "v9.journal")
+	os.WriteFile(wrongSchema, []byte(`{"schema":9,"role":"client","instance_id":"red-mpudp-01"}`), 0o600)
+	if code, _, _ := exec("cleanup", "--state-file", wrongSchema); code != exitConfig {
+		t.Fatalf("cleanup wrong schema: exit=%d", code)
+	}
+}
+
+// A well-formed journal with nothing to undo cleans up successfully.
+func TestCleanupEmptyJournal(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "empty.journal")
+	os.WriteFile(p, []byte(`{"schema":1,"role":"client","instance_id":"red-mpudp-empty01","created_at":"2026-01-01T00:00:00Z"}`), 0o600)
+	if code, out, errs := exec("cleanup", "--state-file", p); code != exitOK {
+		t.Fatalf("cleanup empty journal: exit=%d out=%q err=%q", code, out, errs)
+	}
+}
+
 // CLI-08, CLI-09: client/server parse config without starting the data plane.
 func TestClientServerPrepare(t *testing.T) {
 	dir := t.TempDir()

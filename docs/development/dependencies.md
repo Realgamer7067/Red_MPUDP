@@ -48,7 +48,20 @@ it (`BOOT-21`).
 decision, bump `golang.org/x/crypto` and `golang.org/x/sys` in our own `go.mod`
 to current releases and re-run the Noise vector test.
 
-### golang.org/x/crypto, golang.org/x/sys — transitive only
+### golang.org/x/sys — direct as of M05
+
+`golang.org/x/sys/unix` is used by `test/integration` for the `Capget`
+CAP_NET_ADMIN preflight check (HARNESS-03) and will be the sole mechanism for
+TUN ioctls and socket options from M06 on. BSD-3-Clause.
+
+**Version:** still the `v0.0.0-20201119102817` pin inherited from
+`flynn/noise`. All symbols the harness needs (`Capget`, `CapUserHeader`,
+`LINUX_CAPABILITY_VERSION_3`, `CAP_NET_ADMIN`) are present at that version. The
+coordinated bump of `golang.org/x/crypto` + `golang.org/x/sys` to current
+releases (with a Noise vector re-run) remains the follow-up recorded above and
+should land before M06 starts using newer `unix` APIs.
+
+### golang.org/x/crypto — transitive only
 
 Pulled in by `flynn/noise`. Not imported directly yet. BSD-3-Clause.
 

@@ -27,6 +27,7 @@ subcommands:
   check-config server <file>    parse and validate a server configuration
   client <file>                 parse a client configuration and prepare to run
   server <file>                 parse a server configuration and prepare to run
+  cleanup --state-file <path>   undo host changes recorded in a mutation journal
 
 Secrets are always file references. They are never accepted as command-line
 flags.`
@@ -71,6 +72,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdCheckConfig(args[1:], stdout, stderr)
 	case "client", "server":
 		return cmdRunPrepare(args[0], args[1:], stdout, stderr)
+	case "cleanup":
+		return cmdCleanup(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "red-mpudp: unknown subcommand %q\n\n%s\n", args[0], usage)
 		return exitUsage
