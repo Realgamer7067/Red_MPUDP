@@ -80,12 +80,24 @@ realistic in Go. Formal sign-off folds into the transport decision record
 (D-P0-1). Allocation (1 obj/AEAD call in flynn/noise) is an M12 optimisation,
 not a blocker.
 
-### D-P0-4 — Congestion controller fairness threshold
-Whether the per-direction AIMD controller lets a native TCP flow keep ≥ 35 %
-of a shared bottleneck with Jain fairness ≥ 0.90
-(`plan:SPIKE-39`..`plan:SPIKE-48`, re-checked `plan:CC-FAIR-*`). Failure
-reopens the transport decision in favour of an established congestion-controlled
-datagram transport.
+### D-P0-4 — Congestion controller fairness — SPIKE DONE, result nuanced
+`plan:SPIKE-39..48` complete. Deterministic fluid sim
+(`internal/congestion/phase0sim/`, data in `test/results/phase0/`):
+- **Safety gate PASS at every buffer depth** — a greedy RED_MPUDP flow never
+  drops native TCP below 35 % (TCP keeps 53 % on shallow buffers, more on deep
+  ones).
+- **Equality gate (Jain ≥ 0.90) PASS only for drop-tail buffers ≲ 20 ms**
+  (≈ the 15 ms queue-delay target). On deeper/bloated buffers the delay-gated
+  additive increase stops firing and the controller *yields* to loss-based TCP
+  (Jain ≈ 0.60 at 60 ms buffer) — it self-limits, it does not misbehave.
+- SPIKE-42..45 (additive increase, once-per-RTT halving, stale-feedback
+  collapse, 2-round delay cut) all pass exactly.
+
+**Carried to D-P0-1 / the transport decision (`plan:SPIKE-60..66`)** with three
+options: (1) accept yielding as correct for a latency VPN and reword the §17.4
+Jain gate, (2) add a bounded loss-driven increase path (design change), or
+(3) reopen toward QUIC DATAGRAM. This makes the **QUIC spike load-bearing.**
+Must be re-checked against real `tc netem` at `plan:CC-FAIR-*` (M17).
 
 ### D-P0-5 — Frozen default values
 Queue sizes, replica budgets, pacing rates, probe/report intervals, and the

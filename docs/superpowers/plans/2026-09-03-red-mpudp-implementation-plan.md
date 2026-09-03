@@ -264,18 +264,18 @@ Prove the riskiest assumptions before building Linux VPN plumbing around them.
 
 ### Congestion-control spike
 
-- [ ] **SPIKE-39:** Create a deterministic rate-controller simulator under
+- [x] **SPIKE-39:** Create a deterministic rate-controller simulator under
   `internal/congestion/`.
-- [ ] **SPIKE-40:** Represent pacing rate in integer bytes per second.
-- [ ] **SPIKE-41:** Implement a fake monotonic clock for the simulator.
-- [ ] **SPIKE-42:** Add one-MTU-per-RTT additive-increase simulation.
-- [ ] **SPIKE-43:** Add once-per-RTT multiplicative-decrease simulation.
-- [ ] **SPIKE-44:** Add feedback-staleness simulation.
-- [ ] **SPIKE-45:** Add queue-delay-triggered reduction simulation.
-- [ ] **SPIKE-46:** Run greedy simulated UDP against one TCP-friendly reference
+- [x] **SPIKE-40:** Represent pacing rate in integer bytes per second.
+- [x] **SPIKE-41:** Implement a fake monotonic clock for the simulator.
+- [x] **SPIKE-42:** Add one-MTU-per-RTT additive-increase simulation.
+- [x] **SPIKE-43:** Add once-per-RTT multiplicative-decrease simulation.
+- [x] **SPIKE-44:** Add feedback-staleness simulation.
+- [x] **SPIKE-45:** Add queue-delay-triggered reduction simulation.
+- [x] **SPIKE-46:** Run greedy simulated UDP against one TCP-friendly reference
   flow.
-- [ ] **SPIKE-47:** Calculate Jain's fairness index from the simulated rates.
-- [ ] **SPIKE-48:** Reject the controller design if the reference flow receives
+- [x] **SPIKE-47:** Calculate Jain's fairness index from the simulated rates.
+- [x] **SPIKE-48:** Reject the controller design if the reference flow receives
   less than 35% or fairness falls below 0.90 after warm-up.
 
 ### QUIC DATAGRAM comparison

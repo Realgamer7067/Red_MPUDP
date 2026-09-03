@@ -1,0 +1,37 @@
+# RED_MPUDP Phase 0 congestion / fairness simulation (SPIKE-39..48)
+# date:    2026-09-03T07:21:39Z
+# go:      go version go1.27.0-X:nodwarf5 linux/amd64
+# commit:  5f0878e0f283
+# model:   deterministic fluid sim, internal/congestion/phase0sim/
+#          link 20 Mbit/s, base RTT 40 ms, drop-tail; controller = design §9.5
+#          (init 1 / min 0.128 / max 100 Mbit/s, queue target 15 ms);
+#          reference = one-packet-per-RTT AIMD TCP (MSS 1448).
+#          warmup 15 s, measure 30 s, step 1 ms.
+
+=== RUN   TestAdditiveIncrease
+--- PASS: TestAdditiveIncrease (0.00s)
+=== RUN   TestMultiplicativeDecreaseOncePerRTT
+--- PASS: TestMultiplicativeDecreaseOncePerRTT (0.00s)
+=== RUN   TestStaleFeedbackDropsToMinimum
+--- PASS: TestStaleFeedbackDropsToMinimum (0.00s)
+=== RUN   TestQueueDelayReduction
+--- PASS: TestQueueDelayReduction (0.00s)
+=== RUN   TestFairnessAgainstTCP
+    sim_test.go:172: controller = 1.76 Mbit/s, TCP = 16.56 Mbit/s (link 20, buffer ~60ms)
+    sim_test.go:174: TCP share = 90.6%  Jain = 0.603  utilisation = 91.4%
+    sim_test.go:181: NOTE (D-P0-4): Jain 0.603 < 0.90 at this buffer depth — controller yields to TCP; carried to the transport decision
+--- PASS: TestFairnessAgainstTCP (0.00s)
+=== RUN   TestFairnessBufferSweep
+    sim_test.go:192: buffer   5 ms | controller  7.52 | TCP  8.56 Mbit/s | TCP 53.3% | Jain 0.996
+    sim_test.go:192: buffer  10 ms | controller  7.68 | TCP  8.80 Mbit/s | TCP 53.4% | Jain 0.995
+    sim_test.go:192: buffer  15 ms | controller  7.76 | TCP  8.88 Mbit/s | TCP 53.3% | Jain 0.996
+    sim_test.go:192: buffer  20 ms | controller  7.76 | TCP  9.12 Mbit/s | TCP 54.1% | Jain 0.993
+    sim_test.go:192: buffer  30 ms | controller  3.12 | TCP 14.64 Mbit/s | TCP 82.5% | Jain 0.703
+    sim_test.go:192: buffer  45 ms | controller  1.76 | TCP 16.48 Mbit/s | TCP 90.5% | Jain 0.604
+    sim_test.go:192: buffer  60 ms | controller  1.76 | TCP 16.56 Mbit/s | TCP 90.6% | Jain 0.603
+    sim_test.go:192: buffer 100 ms | controller  1.28 | TCP 17.20 Mbit/s | TCP 93.1% | Jain 0.574
+--- PASS: TestFairnessBufferSweep (0.00s)
+=== RUN   TestJain
+--- PASS: TestJain (0.00s)
+PASS
+ok  	github.com/Realgamer7067/Red_MPUDP/internal/congestion/phase0sim	0.004s
