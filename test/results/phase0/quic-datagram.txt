@@ -1,0 +1,48 @@
+# RED_MPUDP Phase 0 QUIC DATAGRAM spike (SPIKE-49..59)
+# date:    2026-09-03T07:29:10Z
+# cpu:     Intel(R) Core(TM) i7-14650HX
+# go:      go version go1.27.0-X:nodwarf5 linux/amd64
+# quic-go: github.com/quic-go/quic-go v0.62.0
+# module:  experiments/quicdatagram (isolated go.mod)
+
+## API / behaviour tests
+=== RUN   TestLatencyDistributionAtTargetRate
+    bench_test.go:83: loopback datagram echo RTT over 20000 samples at ~3479 pps (elapsed 5.749340677s):
+    bench_test.go:85:   p50=91.021µs p95=273.368µs p99=413.712µs p99.9=760.817µs max=1.151388ms
+--- PASS: TestLatencyDistributionAtTargetRate (5.75s)
+=== RUN   TestCallerOwnedSocketAndDatagramSupport
+--- PASS: TestCallerOwnedSocketAndDatagramSupport (0.00s)
+=== RUN   TestInterfaceBoundSocket
+    spike_test.go:117: SO_BINDTODEVICE/SO_MARK need CAP_NET_ADMIN
+--- SKIP: TestInterfaceBoundSocket (0.00s)
+=== RUN   TestUnreliableDatagramRoundTrip
+--- PASS: TestUnreliableDatagramRoundTrip (0.00s)
+=== RUN   TestMaxDatagramSizeVisibility
+    spike_test.go:166: largest accepted datagram payload: 1372 bytes; DatagramTooLargeError.MaxDatagramPayloadSize = 1372
+--- PASS: TestMaxDatagramSizeVisibility (0.00s)
+=== RUN   TestNoPerDatagramDeliveryFeedback
+    spike_test.go:194: no delivery/loss feedback API on quic.Conn for DATAGRAM frames (v0.62.0)
+--- PASS: TestNoPerDatagramDeliveryFeedback (0.00s)
+=== RUN   TestSendQueueAndCancellation
+    spike_test.go:233: SendDatagram completed 10000 sends without blocking (loopback drained)
+--- PASS: TestSendQueueAndCancellation (0.06s)
+PASS
+ok  	github.com/Realgamer7067/Red_MPUDP/experiments/quicdatagram	5.827s
+
+## Benchmarks (send-only, and full echo)
+goos: linux
+goarch: amd64
+pkg: github.com/Realgamer7067/Red_MPUDP/experiments/quicdatagram
+cpu: Intel(R) Core(TM) i7-14650HX
+BenchmarkDatagramSend-24    	  372242	      6678 ns/op	 179.71 MB/s	    4545 B/op	      10 allocs/op
+BenchmarkDatagramSend-24    	  333694	      6756 ns/op	 177.61 MB/s	    4564 B/op	      10 allocs/op
+BenchmarkDatagramSend-24    	  345154	      6775 ns/op	 177.11 MB/s	    4571 B/op	      10 allocs/op
+BenchmarkDatagramSend-24    	  380234	      6863 ns/op	 174.85 MB/s	    4575 B/op	      10 allocs/op
+BenchmarkDatagramSend-24    	  361767	      6910 ns/op	 173.66 MB/s	    4587 B/op	      10 allocs/op
+BenchmarkDatagramEcho-24    	   42883	     56539 ns/op	  21.22 MB/s	    8555 B/op	      24 allocs/op
+BenchmarkDatagramEcho-24    	   44174	     56766 ns/op	  21.14 MB/s	    8543 B/op	      24 allocs/op
+BenchmarkDatagramEcho-24    	   43351	     55028 ns/op	  21.81 MB/s	    8575 B/op	      24 allocs/op
+BenchmarkDatagramEcho-24    	   42877	     56538 ns/op	  21.22 MB/s	    8556 B/op	      24 allocs/op
+BenchmarkDatagramEcho-24    	   42619	     57109 ns/op	  21.01 MB/s	    8551 B/op	      24 allocs/op
+PASS
+ok  	github.com/Realgamer7067/Red_MPUDP/experiments/quicdatagram	27.633s

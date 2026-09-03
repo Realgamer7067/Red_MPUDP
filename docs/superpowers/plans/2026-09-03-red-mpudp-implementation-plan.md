@@ -280,17 +280,17 @@ Prove the riskiest assumptions before building Linux VPN plumbing around them.
 
 ### QUIC DATAGRAM comparison
 
-- [ ] **SPIKE-49:** Create an isolated `experiments/quicdatagram/` module.
-- [ ] **SPIKE-50:** Pin the candidate QUIC implementation in that module only.
-- [ ] **SPIKE-51:** Open a QUIC connection using a caller-owned UDP socket.
-- [ ] **SPIKE-52:** Bind that UDP socket to a selected Linux interface.
-- [ ] **SPIKE-53:** Send unreliable datagrams without stream fallback.
-- [ ] **SPIKE-54:** Measure supported maximum datagram-size visibility.
-- [ ] **SPIKE-55:** Measure delivery/loss feedback visibility.
-- [ ] **SPIKE-56:** Measure queue ownership and cancellation behavior.
-- [ ] **SPIKE-57:** Benchmark p50/p95/p99 latency at the target packet rate.
-- [ ] **SPIKE-58:** Benchmark throughput and allocations.
-- [ ] **SPIKE-59:** Record whether public APIs meet every RED_MPUDP requirement
+- [x] **SPIKE-49:** Create an isolated `experiments/quicdatagram/` module.
+- [x] **SPIKE-50:** Pin the candidate QUIC implementation in that module only.
+- [x] **SPIKE-51:** Open a QUIC connection using a caller-owned UDP socket.
+- [x] **SPIKE-52:** Bind that UDP socket to a selected Linux interface.
+- [x] **SPIKE-53:** Send unreliable datagrams without stream fallback.
+- [x] **SPIKE-54:** Measure supported maximum datagram-size visibility.
+- [x] **SPIKE-55:** Measure delivery/loss feedback visibility.
+- [x] **SPIKE-56:** Measure queue ownership and cancellation behavior.
+- [x] **SPIKE-57:** Benchmark p50/p95/p99 latency at the target packet rate.
+- [x] **SPIKE-58:** Benchmark throughput and allocations.
+- [x] **SPIKE-59:** Record whether public APIs meet every RED_MPUDP requirement
   without a fork.
 
 ### Decision
