@@ -1,1 +1,31 @@
-.worktrees/
+# worktrees
+/.worktrees/
+
+# build output
+/bin/
+
+# go test / coverage / profiles
+*.test
+*.out
+coverage*.txt
+coverage*.html
+*.prof
+*.pprof
+cpu.out
+mem.out
+
+# benchmark output (checked in deliberately under test/results/, not from here)
+/bench-*.txt
+
+# fuzz corpora generated at runtime by `go test -fuzz`
+# (seed corpora under testdata/fuzz/ ARE committed)
+/testdata/fuzz/
+
+# local key material - never commit real keys or PSKs
+*.key
+*.psk
+!**/testdata/**
+
+# editor / OS cruft
+.DS_Store
+*.swp

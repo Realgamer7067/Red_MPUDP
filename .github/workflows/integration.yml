@@ -1,0 +1,30 @@
+name: integration
+
+# BOOT-20: the privileged integration suite needs root (CAP_NET_ADMIN), creates
+# network namespaces, and may use repository secrets. It must therefore NEVER
+# run untrusted pull-request code:
+#   - no `pull_request` trigger (would run fork code)
+#   - no `pull_request_target` trigger (would run fork code WITH secrets)
+# It runs only on trusted refs: pushes to main and manual dispatch.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  namespace:
+    runs-on: ubuntu-latest # ubuntu-latest images ship a 5.15+/6.x kernel, ip, nft, tc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: tool preflight
+        run: |
+          uname -r
+          ip -V && nft --version && tc -V
+      - name: privileged integration tests
+        run: sudo -E env "PATH=$PATH" make test-integration
