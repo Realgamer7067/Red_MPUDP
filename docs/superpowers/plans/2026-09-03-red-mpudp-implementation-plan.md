@@ -395,98 +395,98 @@ Parse and validate all operator input before privileged or network activity.
 
 ### Configuration schema
 
-- [ ] **CONF-01:** Create `internal/config/client.go` with fields from the client
+- [x] **CONF-01:** Create `internal/config/client.go` with fields from the client
   YAML example.
-- [ ] **CONF-02:** Create `internal/config/server.go` with fields from the server
+- [x] **CONF-02:** Create `internal/config/server.go` with fields from the server
   YAML example.
-- [ ] **CONF-03:** Represent durations with an explicit YAML duration type.
-- [ ] **CONF-04:** Represent marks and routing-table identifiers with bounded
+- [x] **CONF-03:** Represent durations with an explicit YAML duration type.
+- [x] **CONF-04:** Represent marks and routing-table identifiers with bounded
   integer types.
-- [ ] **CONF-05:** Represent all addresses with `netip` types after parsing.
-- [ ] **CONF-06:** Reject unknown YAML fields.
-- [ ] **CONF-07:** Reject duplicate YAML keys.
-- [ ] **CONF-08:** Reject a client server endpoint that is not a literal IPv4
+- [x] **CONF-05:** Represent all addresses with `netip` types after parsing.
+- [x] **CONF-06:** Reject unknown YAML fields.
+- [x] **CONF-07:** Reject duplicate YAML keys.
+- [x] **CONF-08:** Reject a client server endpoint that is not a literal IPv4
   address and port.
-- [ ] **CONF-09:** Reject unspecified, multicast, broadcast, and zero server
+- [x] **CONF-09:** Reject unspecified, multicast, broadcast, and zero server
   addresses.
-- [ ] **CONF-10:** Apply the documented client defaults.
-- [ ] **CONF-11:** Apply the documented server defaults.
-- [ ] **CONF-12:** Validate TUN MTU range 1112 through 1400.
-- [ ] **CONF-13:** Validate maximum paths range 1 through 4.
-- [ ] **CONF-14:** Validate dedup-window range 4096 through 1048576.
-- [ ] **CONF-15:** Require dedup-window size to be a power of two.
-- [ ] **CONF-16:** Validate probe interval range 100 ms through 5 seconds.
-- [ ] **CONF-17:** Validate positive pacing rates and min/initial/max ordering.
-- [ ] **CONF-18:** Validate queue packet and byte limits.
-- [ ] **CONF-19:** Validate interface names without truncation.
-- [ ] **CONF-20:** Reject duplicate interface names.
-- [ ] **CONF-21:** Reject duplicate firewall marks.
-- [ ] **CONF-22:** Reject duplicate route-table IDs.
-- [ ] **CONF-23:** Reject collision between the tunnel table and path tables.
-- [ ] **CONF-24:** Reject overlapping rule-priority ranges.
-- [ ] **CONF-25:** Reject an invalid TUN subnet or server address.
-- [ ] **CONF-26:** Reject peer tunnel addresses outside the configured subnet.
-- [ ] **CONF-27:** Reject duplicate peer tunnel addresses.
-- [ ] **CONF-28:** Reject duplicate peer names.
-- [ ] **CONF-29:** Reject metrics listeners outside loopback without explicit
+- [x] **CONF-10:** Apply the documented client defaults.
+- [x] **CONF-11:** Apply the documented server defaults.
+- [x] **CONF-12:** Validate TUN MTU range 1112 through 1400.
+- [x] **CONF-13:** Validate maximum paths range 1 through 4.
+- [x] **CONF-14:** Validate dedup-window range 4096 through 1048576.
+- [x] **CONF-15:** Require dedup-window size to be a power of two.
+- [x] **CONF-16:** Validate probe interval range 100 ms through 5 seconds.
+- [x] **CONF-17:** Validate positive pacing rates and min/initial/max ordering.
+- [x] **CONF-18:** Validate queue packet and byte limits.
+- [x] **CONF-19:** Validate interface names without truncation.
+- [x] **CONF-20:** Reject duplicate interface names.
+- [x] **CONF-21:** Reject duplicate firewall marks.
+- [x] **CONF-22:** Reject duplicate route-table IDs.
+- [x] **CONF-23:** Reject collision between the tunnel table and path tables.
+- [x] **CONF-24:** Reject overlapping rule-priority ranges.
+- [x] **CONF-25:** Reject an invalid TUN subnet or server address.
+- [x] **CONF-26:** Reject peer tunnel addresses outside the configured subnet.
+- [x] **CONF-27:** Reject duplicate peer tunnel addresses.
+- [x] **CONF-28:** Reject duplicate peer names.
+- [x] **CONF-29:** Reject metrics listeners outside loopback without explicit
   opt-in.
-- [ ] **CONF-30:** Test that validation has no network or filesystem mutation.
+- [x] **CONF-30:** Test that validation has no network or filesystem mutation.
 
 ### Key file handling
 
-- [ ] **ID-01:** Create `internal/identity/keyfile.go`.
-- [ ] **ID-02:** Decode unpadded RFC 4648 standard base64.
-- [ ] **ID-03:** Accept one optional trailing newline.
-- [ ] **ID-04:** Reject leading/trailing spaces.
-- [ ] **ID-05:** Reject padded base64.
-- [ ] **ID-06:** Reject decoded lengths other than 32 bytes.
-- [ ] **ID-07:** Reject group-readable private-key files.
-- [ ] **ID-08:** Reject world-readable private-key files.
-- [ ] **ID-09:** Reject group-readable PSK files.
-- [ ] **ID-10:** Reject world-readable PSK files.
-- [ ] **ID-11:** Permit public-key files to be world-readable.
-- [ ] **ID-12:** Ensure key parsing errors never contain key bytes.
+- [x] **ID-01:** Create `internal/identity/keyfile.go`.
+- [x] **ID-02:** Decode unpadded RFC 4648 standard base64.
+- [x] **ID-03:** Accept one optional trailing newline.
+- [x] **ID-04:** Reject leading/trailing spaces.
+- [x] **ID-05:** Reject padded base64.
+- [x] **ID-06:** Reject decoded lengths other than 32 bytes.
+- [x] **ID-07:** Reject group-readable private-key files.
+- [x] **ID-08:** Reject world-readable private-key files.
+- [x] **ID-09:** Reject group-readable PSK files.
+- [x] **ID-10:** Reject world-readable PSK files.
+- [x] **ID-11:** Permit public-key files to be world-readable.
+- [x] **ID-12:** Ensure key parsing errors never contain key bytes.
 
 ### Key generation and derivation
 
-- [ ] **ID-13:** Create cryptographically random X25519 private-key generation.
-- [ ] **ID-14:** Derive the matching X25519 public key.
-- [ ] **ID-15:** Create cryptographically random 32-byte PSK generation.
-- [ ] **ID-16:** Fail closed on random-source errors.
-- [ ] **ID-17:** Write new private material with mode 0600 using exclusive
+- [x] **ID-13:** Create cryptographically random X25519 private-key generation.
+- [x] **ID-14:** Derive the matching X25519 public key.
+- [x] **ID-15:** Create cryptographically random 32-byte PSK generation.
+- [x] **ID-16:** Fail closed on random-source errors.
+- [x] **ID-17:** Write new private material with mode 0600 using exclusive
   creation.
-- [ ] **ID-18:** Refuse to overwrite an existing key file.
-- [ ] **ID-19:** Derive `peer_id` from the first eight SHA-256 bytes in network
+- [x] **ID-18:** Refuse to overwrite an existing key file.
+- [x] **ID-19:** Derive `peer_id` from the first eight SHA-256 bytes in network
   byte order.
-- [ ] **ID-20:** Derive the HKDF salt from the protocol key-schedule string.
-- [ ] **ID-21:** Derive `preauth_key` with the specified HKDF info string.
-- [ ] **ID-22:** Derive `noise_psk` with the specified HKDF info string.
-- [ ] **ID-23:** Assert the two derived keys differ.
-- [ ] **ID-24:** Add deterministic peer-ID and HKDF golden vectors.
+- [x] **ID-20:** Derive the HKDF salt from the protocol key-schedule string.
+- [x] **ID-21:** Derive `preauth_key` with the specified HKDF info string.
+- [x] **ID-22:** Derive `noise_psk` with the specified HKDF info string.
+- [x] **ID-23:** Assert the two derived keys differ.
+- [x] **ID-24:** Add deterministic peer-ID and HKDF golden vectors.
 
 ### CLI
 
-- [ ] **CLI-01:** Add `keygen` subcommand.
-- [ ] **CLI-02:** Require an explicit output path for `keygen`.
-- [ ] **CLI-03:** Add `public-key` subcommand.
-- [ ] **CLI-04:** Add `psk` subcommand.
-- [ ] **CLI-05:** Add `check-config client` subcommand.
-- [ ] **CLI-06:** Add `check-config server` subcommand.
-- [ ] **CLI-07:** Ensure config-check commands perform no network mutation.
-- [ ] **CLI-08:** Add `client` subcommand argument parsing without starting the
+- [x] **CLI-01:** Add `keygen` subcommand.
+- [x] **CLI-02:** Require an explicit output path for `keygen`.
+- [x] **CLI-03:** Add `public-key` subcommand.
+- [x] **CLI-04:** Add `psk` subcommand.
+- [x] **CLI-05:** Add `check-config client` subcommand.
+- [x] **CLI-06:** Add `check-config server` subcommand.
+- [x] **CLI-07:** Ensure config-check commands perform no network mutation.
+- [x] **CLI-08:** Add `client` subcommand argument parsing without starting the
   data plane.
-- [ ] **CLI-09:** Add `server` subcommand argument parsing without starting the
+- [x] **CLI-09:** Add `server` subcommand argument parsing without starting the
   data plane.
-- [ ] **CLI-10:** Add stable nonzero exit codes for usage, configuration,
+- [x] **CLI-10:** Add stable nonzero exit codes for usage, configuration,
   permission, and runtime failures.
-- [ ] **CLI-11:** Test that secrets supplied directly as CLI flags are rejected.
-- [ ] **CLI-12:** Test that help output contains no sample secret value.
+- [x] **CLI-11:** Test that secrets supplied directly as CLI flags are rejected.
+- [x] **CLI-12:** Test that help output contains no sample secret value.
 
 ### Gate
 
-- [ ] Valid example client and server configs load deterministically.
-- [ ] Every invalid boundary has a focused table-driven test.
-- [ ] Config and identity tests pass under the race detector.
+- [x] Valid example client and server configs load deterministically.
+- [x] Every invalid boundary has a focused table-driven test.
+- [x] Config and identity tests pass under the race detector.
 
 ### Checkpoint
 

@@ -1,0 +1,15 @@
+{
+  "_comment": "Deterministic golden vectors for the RED_MPUDP v1 identity layer (design 4.3, 4.4). Cross-checked against an independent HKDF-SHA-256 implementation. Any change here is a wire-breaking change and requires a spec revision bump.",
+  "peer_id": {
+    "client_public_key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "peer_id_hex": "630dcd2966c43366"
+  },
+  "key_schedule": {
+    "psk_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "salt_source": "SHA-256(\"RED_MPUDP/v1/key-schedule\")",
+    "preauth_info": "RED_MPUDP/v1/preauth",
+    "noise_psk_info": "RED_MPUDP/v1/noise-psk",
+    "preauth_key_hex": "57606477a10abaeef5885e018b4e4a285845feaed1bad746940d8049e1655c90",
+    "noise_psk_hex": "777a45c932681bb6bb12e154cef2bfff961caa38c5334f81dba1aa2977001f6a"
+  }
+}

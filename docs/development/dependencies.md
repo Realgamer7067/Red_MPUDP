@@ -52,6 +52,19 @@ to current releases and re-run the Noise vector test.
 
 Pulled in by `flynn/noise`. Not imported directly yet. BSD-3-Clause.
 
+### github.com/goccy/go-yaml — strict YAML config parsing (M04)
+
+| | |
+|---|---|
+| Version pinned | `v1.19.2` |
+| Capability | `yaml.DisallowUnknownField()` (CONF-06); duplicate map keys rejected by default unless `AllowDuplicateMapKey()` is passed, which it is not (CONF-07); `encoding.TextUnmarshaler` support so `net/netip` types parse directly (CONF-05) |
+| License | MIT |
+| Transitive | none beyond the standard library and `golang.org/x/*` already present |
+
+**Status:** direct dependency as of M04; imported by `internal/config`. Re-confirmed
+against the `v1.19.2` API: `yaml.NewDecoder(r, yaml.DisallowUnknownField())`, a
+second `Decode` call is used to reject multi-document input.
+
 ## Selected but not yet imported (SPIKE-06)
 
 Recorded now, added at the milestone shown. Versions are pinned when imported;
@@ -59,7 +72,6 @@ each choice is re-confirmed against its API at that point.
 
 | Capability | Package | Milestone | Notes / alternative |
 |---|---|---|---|
-| YAML config parsing, strict (reject unknown + duplicate keys) | `github.com/goccy/go-yaml` | M04 | Actively maintained, has strict decoding. Alternative: `gopkg.in/yaml.v3` (KnownFields + duplicate-key error) but effectively frozen. |
 | rtnetlink: links, addresses, routes, rules, monitor | `github.com/jsimonetti/rtnetlink` (+ `github.com/mdlayher/netlink` base) | M08 | Maintained, typed, supports `RTM_*RULE` and multicast monitor. Alternative: `github.com/vishvananda/netlink` (more complete, less clean error model). |
 | nftables transactions (named table install / reconcile / remove) | `github.com/google/nftables` | M08, M20 | Netlink-based, supports atomic batches; no shelling out to `nft`. |
 | systemd-resolved D-Bus client | `github.com/godbus/dbus/v5` | M20 | Standard Go D-Bus binding; call `org.freedesktop.resolve1` directly. |
