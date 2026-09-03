@@ -1,0 +1,24 @@
+RED_MPUDP v1 — normative design baseline
+========================================
+
+Normative protocol document for v1:
+  docs/superpowers/specs/2026-09-02-red-mpudp-design.md
+
+Design revision: 3
+Baseline commit: 904bd12
+  ("docs: rename wire magic RMCU->RMPU, bump design to revision 3")
+
+Lineage:
+  21deb5a  docs: RED_MCUDP multipath UDP VPN design spec        (revision 1)
+  c8f3f71  docs: rename to RED_MPUDP, revise design spec, add    (revision 2 text,
+           v1 implementation plan                                 renamed)
+  904bd12  docs: rename wire magic RMCU->RMPU, bump design to    (revision 3)
+           revision 3
+
+Rule (LOCK-01): the file above is the single source of truth for the v1 wire
+format, security model, MTU arithmetic, and Linux routing behavior. Any change
+to those areas updates the design document and bumps its revision before the
+corresponding code is written (see RELEASE-02 and the pull-request template).
+
+Module path (LOCK-03): github.com/Realgamer7067/Red_MPUDP
+Binary name: red-mpudp
