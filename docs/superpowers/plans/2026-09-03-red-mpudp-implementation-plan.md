@@ -203,50 +203,50 @@ Prove the riskiest assumptions before building Linux VPN plumbing around them.
 
 ### Dependency review
 
-- [ ] **SPIKE-01:** Create `docs/development/dependencies.md`.
-- [ ] **SPIKE-02:** List every direct dependency and the capability it supplies.
-- [ ] **SPIKE-03:** Record the license of every direct dependency.
-- [ ] **SPIKE-04:** Record the maintenance status and most recent reviewed
+- [x] **SPIKE-01:** Create `docs/development/dependencies.md`.
+- [x] **SPIKE-02:** List every direct dependency and the capability it supplies.
+- [x] **SPIKE-03:** Record the license of every direct dependency.
+- [x] **SPIKE-04:** Record the maintenance status and most recent reviewed
   release of the candidate Noise package.
-- [ ] **SPIKE-05:** Confirm the Noise package exposes IKpsk2 and explicit
+- [x] **SPIKE-05:** Confirm the Noise package exposes IKpsk2 and explicit
   transport nonce control without a private fork.
-- [ ] **SPIKE-06:** Record the selected YAML, netlink, nftables, D-Bus, and
+- [x] **SPIKE-06:** Record the selected YAML, netlink, nftables, D-Bus, and
   Prometheus packages without importing them yet.
-- [ ] **SPIKE-07:** Pin the Noise dependency.
-- [ ] **SPIKE-08:** Check in the relevant official Noise test vectors or a script
+- [x] **SPIKE-07:** Pin the Noise dependency.
+- [x] **SPIKE-08:** Check in the relevant official Noise test vectors or a script
   that fetches and hash-verifies them.
 
 ### Noise handshake spike
 
-- [ ] **SPIKE-09:** Create `internal/noisehandshake/pattern_test.go`.
-- [ ] **SPIKE-10:** Construct deterministic initiator and responder static keys
+- [x] **SPIKE-09:** Create `internal/noisehandshake/pattern_test.go`.
+- [x] **SPIKE-10:** Construct deterministic initiator and responder static keys
   for tests.
-- [ ] **SPIKE-11:** Complete one IKpsk2 handshake in memory.
-- [ ] **SPIKE-12:** Assert both peers derive matching initiator-to-responder
+- [x] **SPIKE-11:** Complete one IKpsk2 handshake in memory.
+- [x] **SPIKE-12:** Assert both peers derive matching initiator-to-responder
   cipher states.
-- [ ] **SPIKE-13:** Assert both peers derive matching responder-to-initiator
+- [x] **SPIKE-13:** Assert both peers derive matching responder-to-initiator
   cipher states.
-- [ ] **SPIKE-14:** Assert the two directions do not share a key.
-- [ ] **SPIKE-15:** Assert a wrong server static key fails.
-- [ ] **SPIKE-16:** Assert a wrong client static key fails server authorization.
-- [ ] **SPIKE-17:** Assert a wrong PSK fails.
-- [ ] **SPIKE-18:** Assert a wrong prologue fails.
-- [ ] **SPIKE-19:** Assert transcript tampering fails.
-- [ ] **SPIKE-20:** Run the selected implementation against the official Noise
+- [x] **SPIKE-14:** Assert the two directions do not share a key.
+- [x] **SPIKE-15:** Assert a wrong server static key fails.
+- [x] **SPIKE-16:** Assert a wrong client static key fails server authorization.
+- [x] **SPIKE-17:** Assert a wrong PSK fails.
+- [x] **SPIKE-18:** Assert a wrong prologue fails.
+- [x] **SPIKE-19:** Assert transcript tampering fails.
+- [x] **SPIKE-20:** Run the selected implementation against the official Noise
   vectors.
 
 ### Explicit nonce spike
 
-- [ ] **SPIKE-21:** Create `internal/noisehandshake/nonce_test.go`.
-- [ ] **SPIKE-22:** Encrypt packets with transport nonces 0, 1, 2, and 4097.
-- [ ] **SPIKE-23:** Decrypt those packets in the order 2, 0, 4097, and 1.
-- [ ] **SPIKE-24:** Assert every valid out-of-order packet opens exactly once.
-- [ ] **SPIKE-25:** Assert a repeated nonce/ciphertext is rejected by the replay
+- [x] **SPIKE-21:** Create `internal/noisehandshake/nonce_test.go`.
+- [x] **SPIKE-22:** Encrypt packets with transport nonces 0, 1, 2, and 4097.
+- [x] **SPIKE-23:** Decrypt those packets in the order 2, 0, 4097, and 1.
+- [x] **SPIKE-24:** Assert every valid out-of-order packet opens exactly once.
+- [x] **SPIKE-25:** Assert a repeated nonce/ciphertext is rejected by the replay
   layer used in the spike.
-- [ ] **SPIKE-26:** Assert changing any authenticated header byte breaks AEAD.
-- [ ] **SPIKE-27:** Assert an authentication failure does not prevent a later
+- [x] **SPIKE-26:** Assert changing any authenticated header byte breaks AEAD.
+- [x] **SPIKE-27:** Assert an authentication failure does not prevent a later
   valid lower-nonce packet from opening after `SetNonce` is called again.
-- [ ] **SPIKE-28:** Run the explicit-nonce tests under the race detector.
+- [x] **SPIKE-28:** Run the explicit-nonce tests under the race detector.
 
 ### Crypto throughput spike
 
