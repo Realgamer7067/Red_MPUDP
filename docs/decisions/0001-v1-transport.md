@@ -4,8 +4,9 @@
 **Date:** 2026-09-03
 **Deciders:** malharrajpara28@gmail.com
 **Supersedes / relates to:** design D2, D12; `open-decisions.md` D-P0-1..D-P0-4
-**Design:** spec revision 4 — decision recorded; the flat "Jain ≥ 0.90" fairness
-gate replaced by the normative **§9.5.1 fairness acceptance criterion**
+**Design:** spec revision 4 (baseline commit `de526143b879`) — decision
+recorded; the flat "Jain ≥ 0.90" fairness gate replaced by the normative
+**§9.5.1 fairness acceptance criterion**
 
 ## Context
 
