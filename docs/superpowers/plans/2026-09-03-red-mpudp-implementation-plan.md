@@ -295,14 +295,14 @@ Prove the riskiest assumptions before building Linux VPN plumbing around them.
 
 ### Decision
 
-- [ ] **SPIKE-60:** Create `docs/decisions/0001-v1-transport.md`.
-- [ ] **SPIKE-61:** Put Noise/custom-UDP evidence and QUIC evidence in the same
+- [x] **SPIKE-60:** Create `docs/decisions/0001-v1-transport.md`.
+- [x] **SPIKE-61:** Put Noise/custom-UDP evidence and QUIC evidence in the same
   comparison table.
-- [ ] **SPIKE-62:** Record the congestion/fairness result.
-- [ ] **SPIKE-63:** Record the crypto packet-rate result.
+- [x] **SPIKE-62:** Record the congestion/fairness result.
+- [x] **SPIKE-63:** Record the crypto packet-rate result.
 - [ ] **SPIKE-64:** Select exactly one v1 transport.
 - [ ] **SPIKE-65:** Update the source design if the selection changes D2 or D12.
-- [ ] **SPIKE-66:** Remove the unselected experiment from normal build and test
+- [x] **SPIKE-66:** Remove the unselected experiment from normal build and test
   paths while retaining its decision evidence.
 
 ### Gate
