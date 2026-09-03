@@ -68,6 +68,10 @@ func (h LinuxHost) SetSysctl(key, value string) error {
 	return os.WriteFile(p, []byte(value+"\n"), 0)
 }
 
+// DeleteRoute removes exactly one route, matching on every identifier the
+// journal recorded — destination, table, device, gateway, and metric — so a
+// route that differs only by metric from an operator's own route is not
+// removed by mistake.
 func (h LinuxHost) DeleteRoute(r RouteRecord) error {
 	args := []string{"route", "del", r.Dst, "table", strconv.FormatUint(uint64(r.Table), 10)}
 	if r.Dev != "" {
@@ -75,6 +79,9 @@ func (h LinuxHost) DeleteRoute(r RouteRecord) error {
 	}
 	if r.Via != "" {
 		args = append(args, "via", r.Via)
+	}
+	if r.Priority != 0 {
+		args = append(args, "metric", strconv.FormatUint(uint64(r.Priority), 10))
 	}
 	return idempotentDelete(run(h.ipCmd(), args...))
 }

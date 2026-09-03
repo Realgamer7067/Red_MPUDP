@@ -31,15 +31,29 @@ type Report struct {
 	TablesRemoved    int
 	NFTablesRemoved  int
 	ResolverRestored bool
+
+	// KillSwitchRetained is true when an earlier phase failed and recovery
+	// deliberately left the fail-closed nftables table (and owned route
+	// tables) in place rather than opening traffic on a half-torn-down host
+	// (design §11.5).
+	KillSwitchRetained bool
 }
 
-// Recover undoes exactly the mutations named in j, in shutdown-safe order
-// (design §11.5): tunnel routes and rules first, resolver next, owned tables
-// and nftables last. It is idempotent — a second call with the same journal is
-// a no-op success.
+// Recover undoes exactly the mutations named in j, in the shutdown-safe order
+// of design §11.5, split into two phases with a hard gate between them:
 //
-// role and instanceID identify the caller; a mismatch is refused before any
-// change is made (JOURNAL-11).
+//	Phase 1 — stop routing traffic through the tunnel and restore host state:
+//	  owned routes, then owned rules, then resolver, then sysctls.
+//	Gate    — if any Phase 1 step failed, STOP. The owned route tables and the
+//	          fail-closed nftables kill-switch table are retained so the host
+//	          stays fail-closed instead of leaking traffic while half
+//	          recovered. Report.KillSwitchRetained is set and an error returned.
+//	Phase 2 — only when Phase 1 was clean: flush owned route tables, then
+//	          delete the nftables kill-switch table last.
+//
+// Recovery is idempotent: a second call with the same journal is a no-op
+// success. role and instanceID identify the caller and are checked against the
+// journal before any change is made (JOURNAL-11).
 func Recover(j *Journal, role Role, instanceID string, h Host, logf Logf) (Report, error) {
 	var rep Report
 	if logf == nil {
@@ -52,40 +66,43 @@ func Recover(j *Journal, role Role, instanceID string, h Host, logf Logf) (Repor
 		return rep, err
 	}
 
-	var errs []error
+	var phase1 []error
 
-	// 1. Owned routes, then rules: stop steering traffic through the tunnel.
+	// Phase 1a: owned routes, then rules. A failure here is not itself
+	// dangerous (the tunnel route staying in place keeps traffic captured),
+	// but it blocks Phase 2.
 	for _, r := range j.Routes {
 		if err := h.DeleteRoute(r); err != nil {
-			errs = append(errs, fmt.Errorf("delete route %+v: %w", r, err))
+			phase1 = append(phase1, fmt.Errorf("delete route %+v: %w", r, err))
 			continue
 		}
 		rep.RoutesRemoved++
 	}
 	for _, r := range j.Rules {
 		if err := h.DeleteRule(r); err != nil {
-			errs = append(errs, fmt.Errorf("delete rule prio %d: %w", r.Priority, err))
+			phase1 = append(phase1, fmt.Errorf("delete rule prio %d: %w", r.Priority, err))
 			continue
 		}
 		rep.RulesRemoved++
 	}
 
-	// 2. Resolver state.
+	// Phase 1b: resolver state.
 	if j.Resolver != nil {
 		if err := h.RestoreResolver(*j.Resolver); err != nil {
-			errs = append(errs, fmt.Errorf("restore resolver: %w", err))
+			phase1 = append(phase1, fmt.Errorf("restore resolver: %w", err))
 		} else {
 			rep.ResolverRestored = true
 		}
 	}
 
-	// 3. Sysctls: restore only if the live value is still the one we installed
-	// (JOURNAL-15); otherwise preserve the operator's value and report it
-	// (JOURNAL-16).
+	// Phase 1c: sysctls. Restore only if the live value is still the one we
+	// installed (JOURNAL-15); otherwise preserve the operator's value and
+	// report it (JOURNAL-16). A read error is a Phase 1 failure; a preserved
+	// conflict is not.
 	for _, s := range j.Sysctls {
 		cur, err := h.GetSysctl(s.Name)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("read sysctl %s: %w", s.Name, err))
+			phase1 = append(phase1, fmt.Errorf("read sysctl %s: %w", s.Name, err))
 			continue
 		}
 		if cur == s.Prior {
@@ -97,30 +114,39 @@ func Recover(j *Journal, role Role, instanceID string, h Host, logf Logf) (Repor
 			continue
 		}
 		if err := h.SetSysctl(s.Name, s.Prior); err != nil {
-			errs = append(errs, fmt.Errorf("restore sysctl %s: %w", s.Name, err))
+			phase1 = append(phase1, fmt.Errorf("restore sysctl %s: %w", s.Name, err))
 			continue
 		}
 		rep.SysctlsRestored = append(rep.SysctlsRestored, s.Name)
 	}
 
-	// 4. Owned route tables and the fail-closed nftables table last.
+	// Gate: do not open traffic on a half-recovered host.
+	if len(phase1) > 0 {
+		rep.KillSwitchRetained = len(j.NFTables) > 0
+		logf("recovery stopped after a phase-1 failure; retaining %d route table(s) and %d nftables kill-switch table(s) fail-closed",
+			len(j.Tables), len(j.NFTables))
+		return rep, fmt.Errorf("journal: recovery halted before removing the kill switch: %w", errors.Join(phase1...))
+	}
+
+	// Phase 2: safe to open traffic. Owned route tables, then the fail-closed
+	// nftables table last.
+	var phase2 []error
 	for _, id := range j.Tables {
 		if err := h.DeleteRouteTable(id); err != nil {
-			errs = append(errs, fmt.Errorf("delete route table %d: %w", id, err))
+			phase2 = append(phase2, fmt.Errorf("delete route table %d: %w", id, err))
 			continue
 		}
 		rep.TablesRemoved++
 	}
 	for _, t := range j.NFTables {
 		if err := h.DeleteNFTable(t); err != nil {
-			errs = append(errs, fmt.Errorf("delete nftables table %s/%s: %w", t.Family, t.Name, err))
+			phase2 = append(phase2, fmt.Errorf("delete nftables table %s/%s: %w", t.Family, t.Name, err))
 			continue
 		}
 		rep.NFTablesRemoved++
 	}
-
-	if len(errs) > 0 {
-		return rep, errors.Join(errs...)
+	if len(phase2) > 0 {
+		return rep, errors.Join(phase2...)
 	}
 	return rep, nil
 }

@@ -3,7 +3,10 @@
 package integration
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -13,13 +16,38 @@ import (
 	"time"
 )
 
-// Namespace names used by the topology. They are suffixed per test process
-// (HARNESS-06) so parallel packages do not collide.
+// runID scopes every namespace and re-exec this suite creates to one test run.
+// A re-executed child (helper target, deliberate-fail scenario) inherits it via
+// RED_MPUDP_RUN_ID so parent and child agree on names and leak detection stays
+// scoped to this run only (HARNESS-06, HARNESS-33).
+var runID = resolveRunID()
+
+func resolveRunID() string {
+	if v := os.Getenv("RED_MPUDP_RUN_ID"); v != "" {
+		return v
+	}
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		return "pid" + strconv.Itoa(os.Getpid())
+	}
+	return hex.EncodeToString(b)
+}
+
+// nsKey names one of the three namespaces independent of the run suffix.
+type nsKey string
+
 const (
-	nsClient   = "rmp-client"
-	nsServer   = "rmp-server"
-	nsInternet = "rmp-inet"
+	keyClient   nsKey = "client"
+	keyServer   nsKey = "server"
+	keyInternet nsKey = "internet"
 )
+
+func nsFull(k nsKey) string { return "rmp-" + string(k) + "-" + runID }
+
+// nsPrefix is the common prefix of every namespace this run owns.
+func nsPrefix() string { return "rmp-" }
+
+func nsSuffix() string { return "-" + runID }
 
 // Deterministic addressing (HARNESS-15).
 const (
@@ -34,82 +62,93 @@ const (
 	uplinkSubnet   = "10.77.9.0/24"
 	uplinkServer   = "10.77.9.1"
 	uplinkInternet = "10.77.9.9"
+
+	echoPort = 7
+	dnsPort  = 53
 )
+
+// rootVeths are the veth ends as first created in the root namespace, before
+// being moved. Deleting one end deletes its peer, so cleaning these up covers
+// every partial-setup state.
+var rootVeths = []string{"pa0", "pb0", "up0"}
 
 // Link identifies one impairable link end for the netem helpers.
 type Link struct {
-	NS  string // namespace holding the device
-	Dev string // device name inside that namespace
+	ns  nsKey
+	Dev string
 }
 
-// Path A and Path B, as seen from each namespace.
+// Path A and Path B link ends, as seen from each namespace.
 var (
-	PathAClientSide = Link{nsClient, "pa0"}
-	PathAServerSide = Link{nsServer, "pa1"}
-	PathBClientSide = Link{nsClient, "pb0"}
-	PathBServerSide = Link{nsServer, "pb1"}
+	PathAClientSide = Link{keyClient, "pa0"}
+	PathAServerSide = Link{keyServer, "pa1"}
+	PathBClientSide = Link{keyClient, "pb0"}
+	PathBServerSide = Link{keyServer, "pb1"}
 )
 
 // Topology is a live three-namespace test network. Build one with NewTopology
 // and always defer Close.
 type Topology struct {
-	t       testing.TB
-	suffix  string
-	nsNames []string
+	t testing.TB
 
-	mu    sync.Mutex
-	procs []*exec.Cmd
-	logs  []*os.File
+	mu      sync.Mutex
+	created bool // at least one ip command ran; cleanup is warranted
+	procs   []*exec.Cmd
+	logs    []*os.File
 }
 
-func nsName(base, suffix string) string { return base + "-" + suffix }
-
 // NewTopology creates client/server/internet namespaces, both veth paths, the
-// server uplink, deterministic subnets, up links, and namespace-local routes
-// (HARNESS-06..17). It fails the test (not skips) on any error, having already
-// torn down whatever it created.
+// server uplink, deterministic subnets, up links, and namespace-local routes in
+// both directions (HARNESS-06..17). It fails the test (not skips) on any error,
+// having already torn down whatever it created — including namespaces and veth
+// ends created before the failing step.
 func NewTopology(t testing.TB) *Topology {
 	t.Helper()
 	skipUnlessPrivileged(t)
 
-	suffix := strconv.Itoa(os.Getpid())
-	top := &Topology{t: t, suffix: suffix}
+	top := &Topology{t: t}
+	// From here on any created object must be cleaned up on failure. Mark
+	// cleanup as warranted before the first mutation so an early failure still
+	// removes the namespaces/veths that did get created.
+	top.mu.Lock()
+	top.created = true
+	top.mu.Unlock()
 
-	c := nsName(nsClient, suffix)
-	s := nsName(nsServer, suffix)
-	i := nsName(nsInternet, suffix)
+	c, s, i := nsFull(keyClient), nsFull(keyServer), nsFull(keyInternet)
+
+	fail := func(format string, a ...any) *Topology {
+		top.Close()
+		t.Fatalf(format, a...)
+		return nil // unreachable
+	}
 
 	steps := [][]string{
 		{"netns", "add", c},
 		{"netns", "add", s},
 		{"netns", "add", i},
 
-		// Path A veth pair, ends moved into client/server (HARNESS-10, 11).
 		{"link", "add", "pa0", "type", "veth", "peer", "name", "pa1"},
 		{"link", "set", "pa0", "netns", c},
 		{"link", "set", "pa1", "netns", s},
 
-		// Path B veth pair (HARNESS-12, 13).
 		{"link", "add", "pb0", "type", "veth", "peer", "name", "pb1"},
 		{"link", "set", "pb0", "netns", c},
 		{"link", "set", "pb1", "netns", s},
 
-		// Server <-> internet uplink (HARNESS-14).
 		{"link", "add", "up0", "type", "veth", "peer", "name", "up1"},
 		{"link", "set", "up0", "netns", s},
 		{"link", "set", "up1", "netns", i},
 	}
 	for _, args := range steps {
-		if err := ipRun(top, "", args...); err != nil {
-			top.Close()
-			t.Fatalf("topology setup (%v): %v", args, err)
+		if err := ipRoot(args...); err != nil {
+			return fail("topology setup (%v): %v", args, err)
 		}
 	}
-	top.nsNames = []string{c, s, i}
 
-	// Addresses + link up (HARNESS-15, 16).
-	addr := [][2]string{
-		// ns, "ip/prefixlen dev DEV"
+	addr := []struct {
+		ns   string
+		spec string
+	}{
 		{c, pathAClient + "/24 dev pa0"},
 		{s, pathAServer + "/24 dev pa1"},
 		{c, pathBClient + "/24 dev pb0"},
@@ -118,70 +157,85 @@ func NewTopology(t testing.TB) *Topology {
 		{i, uplinkInternet + "/24 dev up1"},
 	}
 	for _, a := range addr {
-		if err := ipRun(top, a[0], append([]string{"addr", "add"}, strings.Fields(a[1])...)...); err != nil {
-			top.Close()
-			t.Fatalf("addr add %v: %v", a, err)
+		if err := ipIn(a.ns, append([]string{"addr", "add"}, strings.Fields(a.spec)...)...); err != nil {
+			return fail("addr add %v: %v", a, err)
 		}
 	}
-	for _, nd := range [][2]string{
+	for _, nd := range []struct{ ns, dev string }{
 		{c, "pa0"}, {c, "pb0"}, {c, "lo"},
 		{s, "pa1"}, {s, "pb1"}, {s, "up0"}, {s, "lo"},
 		{i, "up1"}, {i, "lo"},
 	} {
-		if err := ipRun(top, nd[0], "link", "set", nd[1], "up"); err != nil {
-			top.Close()
-			t.Fatalf("link up %v: %v", nd, err)
+		if err := ipIn(nd.ns, "link", "set", nd.dev, "up"); err != nil {
+			return fail("link up %v: %v", nd, err)
 		}
 	}
 
-	// Namespace-local routes (HARNESS-17): client reaches the internet subnet
-	// via either server-side path address; server forwards to internet-ns.
-	routes := [][2]string{
+	// Namespace-local routes in BOTH directions (HARNESS-17):
+	//  - client reaches the internet subnet via the server-side path address;
+	//  - server relays with a default route into internet-ns;
+	//  - internet-ns has return routes to both path subnets via the server.
+	routes := []struct{ ns, spec string }{
 		{c, uplinkSubnet + " via " + pathAServer + " dev pa0"},
 		{s, "0.0.0.0/0 via " + uplinkInternet + " dev up0 metric 100"},
+		{i, pathASubnet + " via " + uplinkServer + " dev up1"},
+		{i, pathBSubnet + " via " + uplinkServer + " dev up1"},
 	}
 	for _, r := range routes {
-		if err := ipRun(top, r[0], append([]string{"route", "add"}, strings.Fields(r[1])...)...); err != nil {
-			top.Close()
-			t.Fatalf("route add %v: %v", r, err)
+		if err := ipIn(r.ns, append([]string{"route", "add"}, strings.Fields(r.spec)...)...); err != nil {
+			return fail("route add %v: %v", r, err)
 		}
 	}
-	// Enable forwarding in server-ns so it can relay to internet-ns.
-	if err := nsExec(top, s, "sysctl", "-q", "-w", "net.ipv4.ip_forward=1"); err != nil {
-		top.Close()
-		t.Fatalf("enable forwarding: %v", err)
+
+	if err := nsExec(s, "sysctl", "-q", "-w", "net.ipv4.ip_forward=1"); err != nil {
+		return fail("enable forwarding: %v", err)
 	}
 
 	return top
 }
 
-// Close deletes every namespace this topology created and stops every target
-// process (HARNESS-31, HARNESS-32). It is safe to call more than once.
+// Close stops every target process and deletes every namespace and root-side
+// veth this run created (HARNESS-31, HARNESS-32). It is safe to call more than
+// once.
 func (top *Topology) Close() {
 	top.mu.Lock()
-	for _, p := range top.procs {
-		if p.Process != nil {
-			_ = p.Process.Kill()
-		}
-	}
-	for _, f := range top.logs {
-		_ = f.Close()
-	}
+	procs, logs := top.procs, top.logs
 	top.procs, top.logs = nil, nil
+	warranted := top.created
+	top.created = false
 	top.mu.Unlock()
 
-	for _, ns := range top.nsNames {
-		_ = exec.Command("ip", "netns", "del", ns).Run()
+	for idx, p := range procs {
+		if p.Process != nil {
+			_ = p.Process.Kill()
+			_, _ = p.Process.Wait()
+		}
+		f := logs[idx]
+		if _, err := f.Seek(0, io.SeekStart); err == nil {
+			if b, _ := io.ReadAll(f); len(b) > 0 {
+				top.t.Logf("target %s output:\n%s", f.Name(), b)
+			}
+		}
+		_ = f.Close()
+		_ = os.Remove(f.Name())
 	}
-	top.nsNames = nil
+
+	if !warranted {
+		return
+	}
+	for _, k := range []nsKey{keyClient, keyServer, keyInternet} {
+		_ = exec.Command("ip", "netns", "del", nsFull(k)).Run()
+	}
+	for _, v := range rootVeths {
+		_ = exec.Command("ip", "link", "del", v).Run()
+	}
 }
 
 // ---- impairment (HARNESS-23..27) ----
 
 func (top *Topology) netem(l Link, args ...string) error {
-	// replace is idempotent whether or not a qdisc is already present.
 	base := []string{"qdisc", "replace", "dev", l.Dev, "root", "netem"}
-	return tcRun(top, l.NS, append(base, args...)...)
+	return tcIn(nsFull(l.ns), append(base, args...)...)
 }
 
 // SetDelay adds one-way delay on the given link end (HARNESS-23).
@@ -199,8 +253,8 @@ func (top *Topology) SetDuplication(l Link, pct float64) error {
 	return top.netem(l, "duplicate", fmt.Sprintf("%.4f%%", pct))
 }
 
-// SetReorder sets reorder percentage with a fixed correlation and a small
-// gap-delay so the reorder is deterministic (HARNESS-26).
+// SetReorder sets reorder percentage with a fixed correlation and gap-delay so
+// the reorder is deterministic (HARNESS-26).
 func (top *Topology) SetReorder(l Link, pct float64) error {
 	return top.netem(l, "delay", "10ms", "reorder", fmt.Sprintf("%.4f%%", pct), "50%")
 }
@@ -212,59 +266,85 @@ func (top *Topology) SetRate(l Link, kbit int) error {
 
 // ClearImpairment removes the netem qdisc from a link end.
 func (top *Topology) ClearImpairment(l Link) error {
-	return tcRun(top, l.NS, "qdisc", "del", "dev", l.Dev, "root")
+	return tcIn(nsFull(l.ns), "qdisc", "del", "dev", l.Dev, "root")
 }
 
 // ---- link / address / gateway mutation (HARNESS-28..30) ----
 
-func (top *Topology) LinkDown(l Link) error { return ipRun(top, l.NS, "link", "set", l.Dev, "down") }
-func (top *Topology) LinkUp(l Link) error   { return ipRun(top, l.NS, "link", "set", l.Dev, "up") }
+func (top *Topology) LinkDown(l Link) error { return ipIn(nsFull(l.ns), "link", "set", l.Dev, "down") }
+func (top *Topology) LinkUp(l Link) error   { return ipIn(nsFull(l.ns), "link", "set", l.Dev, "up") }
 
 // SetAddress replaces the primary address on a link end (HARNESS-29).
 func (top *Topology) SetAddress(l Link, cidr string) error {
-	_ = ipRun(top, l.NS, "addr", "flush", "dev", l.Dev)
-	return ipRun(top, l.NS, "addr", "add", cidr, "dev", l.Dev)
+	_ = ipIn(nsFull(l.ns), "addr", "flush", "dev", l.Dev)
+	return ipIn(nsFull(l.ns), "addr", "add", cidr, "dev", l.Dev)
 }
 
 // SetGateway replaces the default route in a namespace (HARNESS-30).
-func (top *Topology) SetGateway(ns, via, dev string) error {
-	_ = ipRun(top, ns, "route", "del", "default")
-	return ipRun(top, ns, "route", "add", "default", "via", via, "dev", dev)
+func (top *Topology) SetGateway(k nsKey, via, dev string) error {
+	_ = ipIn(nsFull(k), "route", "del", "default")
+	return ipIn(nsFull(k), "route", "add", "default", "via", via, "dev", dev)
 }
 
 // ---- targets (HARNESS-18..22) ----
 
-// StartEchoTargets starts ICMP-reachable, UDP-echo, TCP-echo, and DNS targets
-// in internet-ns. Subprocess output is captured per test (HARNESS-22).
+// StartEchoTargets starts UDP-echo, TCP-echo, and DNS targets in internet-ns
+// (ICMP reachability needs no process). Each is a re-exec of this test binary
+// with RED_MPUDP_HELPER set; output is captured per target and surfaced on
+// failure. It blocks until the TCP target actually accepts a connection, or
+// returns an error on timeout — no fixed sleep.
 func (top *Topology) StartEchoTargets() error {
-	i := nsName(nsInternet, top.suffix)
-	// ICMP reachability needs nothing beyond up1 being up (HARNESS-18). The
-	// other three targets are helper processes re-executing this test binary
-	// with RED_MPUDP_HELPER set (see TestMain).
+	i := nsFull(keyInternet)
 	for _, tgt := range []struct{ tag, mode, addr string }{
-		{"udp-echo", "udp-echo", uplinkInternet + ":7"},
-		{"tcp-echo", "tcp-echo", uplinkInternet + ":7"},
-		{"dns", "dns", uplinkInternet + ":53"},
+		{"udp-echo", "udp-echo", fmt.Sprintf("%s:%d", uplinkInternet, echoPort)},
+		{"tcp-echo", "tcp-echo", fmt.Sprintf("%s:%d", uplinkInternet, echoPort)},
+		{"dns", "dns", fmt.Sprintf("%s:%d", uplinkInternet, dnsPort)},
 	} {
 		if err := top.spawn(i, tgt.tag, tgt.mode, tgt.addr); err != nil {
 			return err
 		}
 	}
-	time.Sleep(150 * time.Millisecond) // let listeners bind
-	return nil
+	return top.waitReady(i, fmt.Sprintf("%s:%d", uplinkInternet, echoPort), 3*time.Second)
+}
+
+// waitReady polls a probe-tcp re-exec inside ns until the address accepts a
+// connection.
+func (top *Topology) waitReady(ns, addr string, within time.Duration) error {
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if err := nsExec(ns, os.Args[0], "-test.run=TestMainHelperNoop"); err == nil {
+			return nil
+		}
+		cmd := helperCmd(ns, "probe-tcp", addr)
+		if cmd.Run() == nil {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("targets in %s not ready within %s", ns, within)
+}
+
+func helperCmd(ns, mode, addr string) *exec.Cmd {
+	cmd := exec.Command("ip", "netns", "exec", ns, os.Args[0], "-test.run=TestMainHelperNoop")
+	cmd.Env = append(os.Environ(),
+		"RED_MPUDP_HELPER="+mode,
+		"RED_MPUDP_HELPER_ADDR="+addr,
+		"RED_MPUDP_RUN_ID="+runID,
+	)
+	return cmd
 }
 
 func (top *Topology) spawn(ns, tag, mode, addr string) error {
-	logf, err := os.CreateTemp("", "rmp-"+tag+"-*.log")
+	logf, err := os.CreateTemp("", "rmp-"+tag+"-"+runID+"-*.log")
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command("ip", "netns", "exec", ns, os.Args[0], "-test.run=TestMainHelperNoop")
-	cmd.Env = append(os.Environ(), "RED_MPUDP_HELPER="+mode, "RED_MPUDP_HELPER_ADDR="+addr)
+	cmd := helperCmd(ns, mode, addr)
 	cmd.Stdout = logf
 	cmd.Stderr = logf
 	if err := cmd.Start(); err != nil {
 		logf.Close()
+		os.Remove(logf.Name())
 		return err
 	}
 	top.mu.Lock()
@@ -276,22 +356,21 @@ func (top *Topology) spawn(ns, tag, mode, addr string) error {
 
 // ---- command helpers ----
 
-func ipRun(top *Topology, ns string, args ...string) error {
-	if ns == "" {
-		return execRun(top, "ip", args...)
-	}
-	return execRun(top, "ip", append([]string{"-n", ns}, args...)...)
+func ipRoot(args ...string) error { return execRun("ip", args...) }
+
+func ipIn(ns string, args ...string) error {
+	return execRun("ip", append([]string{"-n", ns}, args...)...)
 }
 
-func tcRun(top *Topology, ns string, args ...string) error {
-	return nsExec(top, ns, append([]string{"tc"}, args...)...)
+func tcIn(ns string, args ...string) error {
+	return nsExec(ns, append([]string{"tc"}, args...)...)
 }
 
-func nsExec(top *Topology, ns string, argv ...string) error {
-	return execRun(top, "ip", append([]string{"netns", "exec", ns}, argv...)...)
+func nsExec(ns string, argv ...string) error {
+	return execRun("ip", append([]string{"netns", "exec", ns}, argv...)...)
 }
 
-func execRun(top *Topology, name string, args ...string) error {
+func execRun(name string, args ...string) error {
 	out, err := exec.Command(name, args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s %s: %v: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
@@ -299,7 +378,9 @@ func execRun(top *Topology, name string, args ...string) error {
 	return nil
 }
 
-// LeakedNamespaces returns any rmp-* namespace still present (HARNESS-33).
+// LeakedNamespaces returns namespaces belonging to THIS run that are still
+// present (HARNESS-33). Scoping by runID avoids false positives from a
+// concurrent run or a stale namespace from an unrelated earlier run.
 func LeakedNamespaces() []string {
 	out, err := exec.Command("ip", "netns", "list").Output()
 	if err != nil {
@@ -307,12 +388,13 @@ func LeakedNamespaces() []string {
 	}
 	var leaked []string
 	for _, line := range strings.Split(string(out), "\n") {
-		name := strings.Fields(line)
-		if len(name) == 0 {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
 			continue
 		}
-		if strings.HasPrefix(name[0], "rmp-") {
-			leaked = append(leaked, name[0])
+		name := fields[0]
+		if strings.HasPrefix(name, nsPrefix()) && strings.HasSuffix(name, nsSuffix()) {
+			leaked = append(leaked, name)
 		}
 	}
 	return leaked

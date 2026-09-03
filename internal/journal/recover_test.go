@@ -16,7 +16,8 @@ type fakeHost struct {
 	sysctlSet     map[string]string
 	resolver      int
 
-	failDeleteRoute bool
+	failDeleteRoute   bool
+	failDeleteNFTable bool
 }
 
 func newFakeHost() *fakeHost {
@@ -51,6 +52,9 @@ func (h *fakeHost) DeleteRouteTable(id uint32) error {
 	return nil
 }
 func (h *fakeHost) DeleteNFTable(t NFTableRecord) error {
+	if h.failDeleteNFTable {
+		return errors.New("boom")
+	}
 	h.nftDeleted = append(h.nftDeleted, t)
 	return nil
 }
@@ -160,7 +164,9 @@ func TestRecoverTouchesOnlyOwnedResources(t *testing.T) {
 	}
 }
 
-func TestRecoverAggregatesErrors(t *testing.T) {
+// A phase-1 failure aggregates the errors from the rest of phase 1 but stops
+// before phase 2, keeping the host fail-closed.
+func TestRecoverAggregatesPhase1Errors(t *testing.T) {
 	j := validJournal()
 	h := newFakeHost()
 	h.sysctl["net.ipv4.ip_forward"] = "1"
@@ -170,8 +176,54 @@ func TestRecoverAggregatesErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an aggregated error")
 	}
-	// Other work still proceeded.
-	if rep.RulesRemoved != 1 || rep.TablesRemoved != 2 {
-		t.Fatalf("recovery stopped early on a route error: %+v", rep)
+	// The rest of phase 1 still ran.
+	if rep.RulesRemoved != 1 || len(rep.SysctlsRestored) != 1 {
+		t.Fatalf("phase 1 stopped early on a route error: %+v", rep)
+	}
+}
+
+// Blocker 4: a phase-1 failure must NOT remove the nftables kill-switch table
+// or flush owned route tables (design §11.5 fail-closed on unexpected exit).
+func TestRecoverRetainsKillSwitchOnPhase1Failure(t *testing.T) {
+	j := validJournal()
+	h := newFakeHost()
+	h.sysctl["net.ipv4.ip_forward"] = "1"
+	h.failDeleteRoute = true
+
+	rep, err := Recover(j, RoleClient, j.InstanceID, h, nil)
+	if err == nil {
+		t.Fatal("expected recovery to halt")
+	}
+	if !rep.KillSwitchRetained {
+		t.Fatal("KillSwitchRetained not set after a phase-1 failure")
+	}
+	if len(h.nftDeleted) != 0 {
+		t.Fatalf("nftables kill-switch table deleted despite a phase-1 failure: %+v", h.nftDeleted)
+	}
+	if len(h.tablesDeleted) != 0 {
+		t.Fatalf("owned route tables flushed despite a phase-1 failure: %v", h.tablesDeleted)
+	}
+	if rep.NFTablesRemoved != 0 || rep.TablesRemoved != 0 {
+		t.Fatalf("phase 2 ran despite a phase-1 failure: %+v", rep)
+	}
+}
+
+// A phase-2 failure (kill-switch removal) is still reported, but only reached
+// once phase 1 is clean.
+func TestRecoverReportsPhase2Errors(t *testing.T) {
+	j := validJournal()
+	h := newFakeHost()
+	h.sysctl["net.ipv4.ip_forward"] = "1"
+	h.failDeleteNFTable = true
+
+	rep, err := Recover(j, RoleClient, j.InstanceID, h, nil)
+	if err == nil {
+		t.Fatal("expected a phase-2 error")
+	}
+	if rep.RoutesRemoved != 1 || rep.RulesRemoved != 1 || rep.TablesRemoved != 2 {
+		t.Fatalf("phase 1 and route-table flush should have completed: %+v", rep)
+	}
+	if rep.KillSwitchRetained {
+		t.Fatal("KillSwitchRetained should not be set for a phase-2 failure")
 	}
 }

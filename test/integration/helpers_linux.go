@@ -4,15 +4,21 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
+
+	"github.com/Realgamer7067/Red_MPUDP/internal/journal"
 )
 
 // runHelper is invoked from TestMain when RED_MPUDP_HELPER is set: the process
 // is a re-exec of the test binary running inside a namespace. The echo/dns
 // modes are long-lived targets in internet-ns; probe-tcp is a one-shot
-// reachability check run from client-ns.
+// reachability check; journal-recover exercises JOURNAL-24 entirely inside
+// client-ns.
 func runHelper(mode, addr string) {
 	switch mode {
 	case "udp-echo":
@@ -31,9 +37,65 @@ func runHelper(mode, addr string) {
 		_, _ = c.Write([]byte("ping"))
 		c.Close()
 		os.Exit(0)
+	case "journal-recover":
+		os.Exit(journalRecoverInNamespace())
 	default:
 		os.Exit(2)
 	}
+}
+
+// journalRecoverInNamespace runs inside client-ns (JOURNAL-24). It installs one
+// route it will claim to own and one it will not, both in table 200, then runs
+// journal.Recover with the real LinuxHost and verifies that only the owned
+// route was removed. Returns a process exit code.
+func journalRecoverInNamespace() int {
+	const (
+		ownedDst     = "10.99.0.0/24"
+		unrelatedDst = "10.98.0.0/24"
+		table        = "200"
+	)
+	sh := func(args ...string) error {
+		out, err := exec.Command("ip", args...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("ip %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	for _, dst := range []string{ownedDst, unrelatedDst} {
+		if err := sh("route", "replace", dst, "via", pathAServer, "dev", "pa0", "table", table); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	}
+
+	j := &journal.Journal{
+		Schema:     journal.SchemaVersion,
+		Role:       journal.RoleClient,
+		InstanceID: "red-mpudp-ns-" + runID,
+		Routes: []journal.RouteRecord{
+			{Table: 200, Dst: ownedDst, Dev: "pa0", Via: pathAServer},
+		},
+	}
+	if _, err := journal.Recover(j, journal.RoleClient, j.InstanceID, journal.LinuxHost{}, nil); err != nil {
+		fmt.Fprintln(os.Stderr, "recover:", err)
+		return 1
+	}
+
+	shown, err := exec.Command("ip", "route", "show", "table", table).CombinedOutput()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "route show:", err)
+		return 1
+	}
+	text := string(shown)
+	if strings.Contains(text, "10.99.0.0/24") {
+		fmt.Fprintln(os.Stderr, "owned route was not removed:\n"+text)
+		return 1
+	}
+	if !strings.Contains(text, "10.98.0.0/24") {
+		fmt.Fprintln(os.Stderr, "unrelated route was removed:\n"+text)
+		return 1
+	}
+	return 0
 }
 
 func udpEcho(addr string) {

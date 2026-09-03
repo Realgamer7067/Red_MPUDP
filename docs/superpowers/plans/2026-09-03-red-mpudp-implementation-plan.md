@@ -569,27 +569,42 @@ Create a deterministic, recoverable place to exercise privileged networking.
 - [x] **JOURNAL-23:** Refuse cleanup when the journal is malformed.
 - [ ] **JOURNAL-24:** Test recovery entirely inside a namespace.
 
-### Status (2026-09-03)
+### Status (2026-09-03, revised after code review)
 
 Landed:
 
-- The full harness (`test/integration/`): unique per-process namespace names,
-  three namespaces, both veth paths + server uplink, deterministic subnets,
-  routes, `tc netem` delay/loss/duplication/reorder/rate helpers, link /
-  address / gateway mutation, per-test subprocess capture, and post-suite leak
-  detection. HARNESS-01..05 (preflight detection + precise skip) are verified
-  in this environment; HARNESS-06..34 are implemented but exercised only by
-  `TestTopologyLifecycle` / `TestFailedTestLeavesNoNamespace`, which **skip
-  here** for lack of `CAP_NET_ADMIN`.
-- The mutation journal (`internal/journal/`): schema + secret-free assertion,
-  atomic 0600 write (temp + fsync + rename + dir fsync), strict load
-  (schema-version, unknown-field, and identifier rejection), ownership check,
-  and idempotent `Recover` with the sysctl restore-only-if-unchanged /
-  preserve-and-report-conflict rule — all covered by unit tests against a fake
-  `Host`. `red-mpudp cleanup --state-file` parsing and its
-  missing/malformed/wrong-schema refusals (JOURNAL-21..23) are covered.
-  `LinuxHost` (real `ip`/`/proc/sys`/`nft`) is implemented but unexercised
-  here.
+- The full harness (`test/integration/`): per-run (`runID`) namespace names
+  shared with re-exec children; three namespaces; both veth paths + server
+  uplink; deterministic subnets; namespace-local routes in **both** directions
+  (internet-ns has return routes to each path subnet); `tc netem`
+  delay/loss/duplication/reorder/rate helpers; link / address / gateway
+  mutation; re-exec echo/DNS targets with readiness polling (no fixed sleep)
+  and per-target output captured, dumped on failure, then removed; `Close`
+  waits on and reaps target processes and best-effort removes both namespaces
+  and root-side veth ends, so a mid-setup failure leaks nothing;
+  run-scoped leak detection. HARNESS-01..05 (preflight detection + precise
+  skip) are verified in this environment; HARNESS-06..34 are implemented but
+  exercised only by the privileged tests, which **skip here** for lack of
+  `CAP_NET_ADMIN`.
+- The mutation journal (`internal/journal/`): schema + secret-free assertion;
+  atomic 0600 write (temp + fsync + rename + dir fsync); `Load` opened
+  `O_NOFOLLOW` and required to be a single-hard-link regular file, mode 0600
+  or tighter, owned by the caller or root, with no trailing data after the
+  JSON document; `EnsureDir` rejects a symlinked or wrong-owner directory;
+  `checkOwner`; and a **two-phase** `Recover` — phase 1 (routes, rules,
+  resolver, sysctls with restore-only-if-unchanged / preserve-and-report),
+  then a hard gate, then phase 2 (route-table flush, nftables kill switch
+  last). A phase-1 failure retains the kill switch fail-closed
+  (`Report.KillSwitchRetained`). `LinuxHost.DeleteRoute` matches on the
+  recorded metric. All covered by unit tests against a fake `Host`.
+  `red-mpudp cleanup --role client|server [--state-file] [--instance]`
+  independently asserts the expected role/instance against the journal before
+  any mutation, and refuses a missing / malformed / trailing-data /
+  wrong-schema / role-mismatch / loose-permission journal (JOURNAL-21..23).
+- **JOURNAL-24** is implemented: `TestRecoverInNamespace` re-execs the test
+  binary inside client-ns, installs an owned and an unrelated route in one
+  table, runs `journal.Recover` with the real `LinuxHost`, and asserts only
+  the owned route is removed. It **skips here** for lack of `CAP_NET_ADMIN`.
 
 Blocked on a privileged run (root + `ip`/`tc`/`nft`):
 
@@ -599,12 +614,16 @@ Blocked on a privileged run (root + `ip`/`tc`/`nft`):
 
 ### Gate
 
-- [ ] The topology can be created, impaired, and destroyed repeatedly. *(blocked: privileged run)*
-- [ ] A deliberately failed test leaves no namespace behind. *(blocked: privileged run)*
+- [ ] The topology can be created, impaired, and destroyed repeatedly.
+  *(blocked: privileged run — `TestTopologyLifecycle`)*
+- [ ] A deliberately failed test leaves no namespace behind.
+  *(blocked: privileged run — `TestFailedTestLeavesNoNamespace` runs the
+  failing scenario as a subprocess and asserts nonzero exit + no run-scoped
+  namespace survives)*
 - [ ] Journal recovery never removes an unrelated route, rule, nftables table,
   resolver setting, or sysctl change. *(unit-proven against a fake host in
   `TestRecoverTouchesOnlyOwnedResources`; end-to-end confirmation blocked on a
-  privileged run — JOURNAL-24)*
+  privileged run — `TestRecoverInNamespace` / JOURNAL-24)*
 
 ### Checkpoint
 

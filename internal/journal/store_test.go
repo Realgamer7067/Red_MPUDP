@@ -80,6 +80,66 @@ func TestLoadRejects(t *testing.T) {
 	if _, err := Load(p3); err == nil {
 		t.Fatal("Load accepted schema version 2")
 	}
+
+	// Trailing data after the JSON document.
+	p4 := filepath.Join(dir, "trailing.json")
+	os.WriteFile(p4, []byte(`{"schema":1,"role":"client","instance_id":"red-mpudp-01"}`+"\n{}"), 0o600)
+	if _, err := Load(p4); err == nil {
+		t.Fatal("Load accepted trailing data after the JSON document")
+	}
+}
+
+// Blocker 8: Load hardening — group/world-accessible files, symlinks, and
+// hard-linked files are refused before the content is parsed.
+func TestLoadFilePermissionAndTypeChecks(t *testing.T) {
+	dir := t.TempDir()
+	good := []byte(`{"schema":1,"role":"client","instance_id":"red-mpudp-good01"}`)
+
+	// Group-readable.
+	loose := filepath.Join(dir, "loose.journal")
+	if err := os.WriteFile(loose, good, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(loose, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(loose); err == nil {
+		t.Fatal("Load accepted a group-readable journal")
+	}
+
+	// Symlink to a valid file.
+	real := filepath.Join(dir, "real.journal")
+	os.WriteFile(real, good, 0o600)
+	link := filepath.Join(dir, "link.journal")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+	if _, err := Load(link); err == nil {
+		t.Fatal("Load followed a symlink")
+	}
+
+	// Hard link (nlink > 1).
+	hard := filepath.Join(dir, "hard.journal")
+	if err := os.Link(real, hard); err != nil {
+		t.Skipf("hard link not supported: %v", err)
+	}
+	if _, err := Load(hard); err == nil {
+		t.Fatal("Load accepted a file with multiple hard links")
+	}
+}
+
+// Blocker 7: EnsureDir refuses a symlinked directory rather than using it.
+func TestEnsureDirRefusesSymlink(t *testing.T) {
+	base := t.TempDir()
+	realDir := filepath.Join(base, "real")
+	os.Mkdir(realDir, 0o700)
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(realDir, link); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+	if err := EnsureDir(link); err == nil {
+		t.Fatal("EnsureDir accepted a symlinked directory")
+	}
 }
 
 func TestEnsureDir(t *testing.T) {
