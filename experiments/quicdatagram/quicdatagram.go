@@ -7,7 +7,9 @@
 // visibility of the current maximum datagram size; per-datagram delivery/loss
 // feedback; and a send path RED_MPUDP can bound, prioritise, and cancel.
 //
-// It is deleted once the transport decision (SPIKE-66) is recorded.
+// The transport decision (docs/decisions/0001-v1-transport.md) rejected QUIC;
+// this module is retained as that decision's evidence (SPIKE-66) and stays out
+// of the main module / CI via its own go.mod.
 package quicdatagram
 
 import (
@@ -21,11 +23,77 @@ import (
 	"errors"
 	"math/big"
 	"net"
+	"sync"
 	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
 )
+
+// throttledPacketConn rate-limits WriteTo to bytesPerSec, so the QUIC send path
+// backs up and the fixed datagram send queue can be observed filling (SPIKE-56).
+type throttledPacketConn struct {
+	net.PacketConn
+	bytesPerSec float64
+
+	mu     sync.Mutex
+	credit float64
+	last   time.Time
+}
+
+func newThrottledPacketConn(pc net.PacketConn, bytesPerSec float64) *throttledPacketConn {
+	return &throttledPacketConn{PacketConn: pc, bytesPerSec: bytesPerSec}
+}
+
+func (c *throttledPacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+	c.mu.Lock()
+	now := time.Now()
+	if c.last.IsZero() {
+		c.last = now
+	}
+	c.credit += c.bytesPerSec * now.Sub(c.last).Seconds()
+	if c.credit > c.bytesPerSec { // cap burst at 1 s
+		c.credit = c.bytesPerSec
+	}
+	c.last = now
+	need := float64(len(p))
+	var wait time.Duration
+	if c.credit < need {
+		wait = time.Duration((need - c.credit) / c.bytesPerSec * float64(time.Second))
+		c.credit = 0
+	} else {
+		c.credit -= need
+	}
+	c.mu.Unlock()
+	if wait > 0 {
+		time.Sleep(wait)
+	}
+	return c.PacketConn.WriteTo(p, addr)
+}
+
+// pass through the optional optimisation interfaces quic-go probes for.
+func (c *throttledPacketConn) SetReadBuffer(n int) error {
+	if u, ok := c.PacketConn.(interface{ SetReadBuffer(int) error }); ok {
+		return u.SetReadBuffer(n)
+	}
+	return nil
+}
+
+func (c *throttledPacketConn) SetWriteBuffer(n int) error {
+	if u, ok := c.PacketConn.(interface{ SetWriteBuffer(int) error }); ok {
+		return u.SetWriteBuffer(n)
+	}
+	return nil
+}
+
+func (c *throttledPacketConn) SyscallConn() (syscall.RawConn, error) {
+	if u, ok := c.PacketConn.(interface {
+		SyscallConn() (syscall.RawConn, error)
+	}); ok {
+		return u.SyscallConn()
+	}
+	return nil, errors.New("no SyscallConn")
+}
 
 // ALPN used by the spike.
 const ALPN = "red-mpudp-quic-spike"

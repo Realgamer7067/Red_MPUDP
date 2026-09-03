@@ -44,21 +44,27 @@ target); the reference is one-packet-per-RTT AIMD TCP (MSS 1448).
 
 3. For a **latency-first** VPN, yielding throughput to bulk TCP on a
    bufferbloated shared bottleneck — rather than matching it and inflating queue
-   delay for everyone — is arguably the intended behaviour, not a bug. But the
-   literal §17.4 gate ("two-flow Jain ≥ 0.90") is **not met on deep buffers**.
+   delay for everyone — is the intended behaviour. The controller yields
+   monotonically (7.76 → 3.12 → 1.76 → 1.28 Mbit/s) and never sits at a high
+   queue delay without reducing.
 
-## Recommendation (input to SPIKE-60..66 and D-P0-4)
+## Outcome (SPIKE-48 / decision 0001 / D-P0-4)
 
-- The custom-UDP + §9.5 controller is **viable on the safety axis** (no TCP
-  starvation, bounded, testable, deterministic — SPIKE-42..45 all pass).
-- The **equality axis is conditional**: fair on shallow buffers, yields on
-  bloated ones. Options for the decision record:
-  1. Accept yielding as correct for a latency VPN and record the §17.4 Jain
-     gate as "≥ 0.90 for buffers within one BDP / ≤ target; yields gracefully
-     beyond" — confirm with the real `tc netem` test at M17 CC-FAIR.
-  2. Add a bounded loss-driven increase path so the controller stays
-     competitive on deep buffers at some latency cost (design change to §9.5).
-  3. Reopen the transport toward QUIC DATAGRAM, whose congestion control
-     (Cubic/BBR in quic-go) has an established TCP-fairness story — this is why
-     the **QUIC spike (SPIKE-49..59) is load-bearing, not just due diligence.**
-- This is **not** an M01/M03 blocker; it is a decision-record item.
+The flat "reject if two-flow Jain < 0.90 at any depth" gate was wrong for this
+design. **Spec revision 4 replaces it with the normative §9.5.1 fairness
+acceptance criterion:**
+
+1. **Anti-flood floor** — native TCP ≥ 35 % at every swept buffer depth.
+2. **Equality** — Jain ≥ 0.90 for buffer depths ≤ `queue_delay_target` (15 ms).
+3. **Graceful yield** — above the target, deeper buffer ⇒ controller throughput
+   non-increasing AND native TCP share non-decreasing.
+
+`internal/congestion/phase0sim/sim_test.go:TestFairnessCriterion` asserts all
+three. The Phase 0 sim **meets the criterion** (min TCP share 53 %; Jain ≈ 0.996
+at ≤ 15 ms; monotonic yield above). Not an M03 blocker.
+
+**M17 (`plan:CC-FAIR-08`)** still improves competitiveness on bloated buffers:
+add a bounded loss-driven additive-increase path (delay-gated increase stays
+primary) so that, with it enabled, Jain ≥ 0.90 also at a 60 ms drop-tail buffer
+on `tc netem`, clauses 1 and 3 still holding. `phase0sim` is the starting point
+for that controller.

@@ -152,45 +152,70 @@ func runFairness(bufferSeconds float64) (ctrlBps, tcpBps float64) {
 	return sm.Run()
 }
 
-// SPIKE-46, SPIKE-47: greedy controller flow vs one long-lived TCP flow on a
-// shared bottleneck. The hard assertion is the anti-flood floor from design
-// §17.4 (native TCP keeps >= 35%): the custom UDP data plane must never starve
-// TCP. The Jain index is reported for the transport decision (SPIKE-48 / D-P0-4)
-// rather than asserted here, because the design's delay-gated controller
-// deliberately yields to bufferbloating loss-based TCP and the "reject vs
-// reopen transport" call is made in the decision record with the buffer sweep
-// below in hand.
-func TestFairnessAgainstTCP(t *testing.T) {
-	ctrlBps, tcpBps := runFairness(0.06) // ~60 ms drop-tail buffer
-	total := ctrlBps + tcpBps
-	if total == 0 {
-		t.Fatal("no throughput")
-	}
-	tcpShare := tcpBps / total
-	jain := Jain(ctrlBps, tcpBps)
+// targetDelayMs is the controller's queue_delay_target in ms (design §14 default).
+const targetDelayMs = 15
 
-	t.Logf("controller = %.2f Mbit/s, TCP = %.2f Mbit/s (link 20, buffer ~60ms)",
-		mbps(ctrlBps)*8, mbps(tcpBps)*8)
-	t.Logf("TCP share = %.1f%%  Jain = %.3f  utilisation = %.1f%%",
-		tcpShare*100, jain, total/(20_000_000.0/8)*100)
+// SPIKE-46, SPIKE-47, SPIKE-48: greedy controller flow vs one long-lived TCP
+// flow on a shared drop-tail bottleneck, swept across buffer depths. Asserts
+// the design §9.5.1 fairness acceptance criterion in full:
+//
+//  1. anti-flood floor  - native TCP >= 35% at EVERY depth
+//  2. equality          - Jain >= 0.90 for depths <= queue_delay_target
+//  3. graceful yield     - above the target, deeper buffer => controller
+//     throughput non-increasing AND native TCP share non-decreasing
+func TestFairnessCriterion(t *testing.T) {
+	depthsMs := []float64{5, 10, 15, 20, 30, 45, 60, 100}
 
-	if tcpShare < 0.35 {
-		t.Errorf("SPIKE-48 floor: TCP kept only %.1f%% of the bottleneck (< 35%%) — the UDP flow is starving TCP", tcpShare*100)
+	type row struct {
+		bufMs            float64
+		ctrl, tcp, share float64
+		jain             float64
 	}
-	if jain < 0.90 {
-		t.Logf("NOTE (D-P0-4): Jain %.3f < 0.90 at this buffer depth — controller yields to TCP; carried to the transport decision", jain)
-	}
-}
-
-// SPIKE-48: buffer-depth sweep. Fairness of the delay-gated controller against
-// loss-based TCP degrades as the drop-tail buffer grows past the 15 ms target.
-func TestFairnessBufferSweep(t *testing.T) {
-	for _, bufMs := range []float64{5, 10, 15, 20, 30, 45, 60, 100} {
-		ctrlBps, tcpBps := runFairness(bufMs / 1000)
-		total := ctrlBps + tcpBps
-		jain := Jain(ctrlBps, tcpBps)
+	rows := make([]row, 0, len(depthsMs))
+	for _, bufMs := range depthsMs {
+		c, tc := runFairness(bufMs / 1000)
+		total := c + tc
+		if total == 0 {
+			t.Fatalf("buffer %.0fms: no throughput", bufMs)
+		}
+		r := row{bufMs: bufMs, ctrl: c, tcp: tc, share: tc / total, jain: Jain(c, tc)}
+		rows = append(rows, r)
 		t.Logf("buffer %3.0f ms | controller %5.2f | TCP %5.2f Mbit/s | TCP %4.1f%% | Jain %.3f",
-			bufMs, mbps(ctrlBps)*8, mbps(tcpBps)*8, tcpBps/total*100, jain)
+			bufMs, mbps(c)*8, mbps(tc)*8, r.share*100, r.jain)
+	}
+
+	const eps = 0.005 // fluid-model slack
+
+	// Clause 1: anti-flood floor at every depth.
+	for _, r := range rows {
+		if r.share < 0.35 {
+			t.Errorf("clause 1 (anti-flood): buffer %.0fms TCP share %.1f%% < 35%% — RED_MPUDP is starving TCP",
+				r.bufMs, r.share*100)
+		}
+	}
+
+	// Clause 2: Jain >= 0.90 at or below queue_delay_target.
+	for _, r := range rows {
+		if r.bufMs <= targetDelayMs && r.jain < 0.90 {
+			t.Errorf("clause 2 (equality): buffer %.0fms (<= %dms target) Jain %.3f < 0.90",
+				r.bufMs, targetDelayMs, r.jain)
+		}
+	}
+
+	// Clause 3: monotonic yield above the target.
+	for i := 1; i < len(rows); i++ {
+		prev, cur := rows[i-1], rows[i]
+		if cur.bufMs <= targetDelayMs {
+			continue
+		}
+		if cur.ctrl > prev.ctrl*(1+eps) {
+			t.Errorf("clause 3 (yield): controller throughput rose from %.2f to %.2f Mbit/s as buffer grew %.0f->%.0fms",
+				mbps(prev.ctrl)*8, mbps(cur.ctrl)*8, prev.bufMs, cur.bufMs)
+		}
+		if cur.share < prev.share-eps {
+			t.Errorf("clause 3 (yield): TCP share fell from %.1f%% to %.1f%% as buffer grew %.0f->%.0fms",
+				prev.share*100, cur.share*100, prev.bufMs, cur.bufMs)
+		}
 	}
 }
 

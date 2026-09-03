@@ -194,14 +194,11 @@ func TestNoPerDatagramDeliveryFeedback(t *testing.T) {
 	t.Log("no delivery/loss feedback API on quic.Conn for DATAGRAM frames (v0.62.0)")
 }
 
-// SPIKE-56: the send queue is a fixed 32-frame FIFO; SendDatagram BLOCKS when
-// it is full. There is no bound-by-bytes, deadline, priority, or drop policy.
-// ReceiveDatagram honours context cancellation.
-func TestSendQueueAndCancellation(t *testing.T) {
-	lb := newLoopback(t, false) // no echo drain on the server side
+// SPIKE-56a: ReceiveDatagram honours context cancellation.
+func TestReceiveDatagramCancellation(t *testing.T) {
+	lb := newLoopback(t, false)
 	defer lb.stop()
 
-	// Cancellation: ReceiveDatagram returns promptly on a cancelled context.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	start := time.Now()
@@ -211,16 +208,60 @@ func TestSendQueueAndCancellation(t *testing.T) {
 	if d := time.Since(start); d > 250*time.Millisecond {
 		t.Fatalf("ReceiveDatagram(cancelled) took %v", d)
 	}
+}
 
-	// Send-queue back-pressure: hammer SendDatagram from a goroutine; with the
-	// peer not reading and a small BDP it must block well before 10k sends.
+// SPIKE-56b: the datagram send queue is a fixed 32-frame FIFO and SendDatagram
+// BLOCKS when it is full — there is no byte bound, deadline, priority, or drop
+// policy. Demonstrated by throttling the underlying socket so QUIC cannot flush
+// the queue: a goroutine issuing 10k sends stalls almost immediately.
+func TestSendQueueBlocksWhenFull(t *testing.T) {
+	serverTLS, clientTLS, err := selfSignedTLS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	qconf := &quic.Config{EnableDatagrams: true}
+
+	srvPC, err := BoundUDPConn("", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srvTr := &quic.Transport{Conn: srvPC}
+	ln, err := srvTr.Listen(serverTLS, qconf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	rawCli, err := BoundUDPConn("", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 20 KB/s: far below any datagram send rate, so the 32-frame queue fills.
+	cliPC := newThrottledPacketConn(rawCli, 20_000)
+	cliTr := &quic.Transport{Conn: cliPC}
+	defer cliTr.Close()
+
+	accCh := make(chan *quic.Conn, 1)
+	go func() { c, _ := ln.Accept(context.Background()); accCh <- c }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cc, err := cliTr.Dial(ctx, ln.Addr(), clientTLS, qconf)
+	if err != nil {
+		t.Fatalf("dial (throttled): %v", err)
+	}
+	defer cc.CloseWithError(0, "done")
+	if sc := <-accCh; sc != nil {
+		defer sc.CloseWithError(0, "done")
+	}
+
 	var sent int64
 	done := make(chan struct{})
 	go func() {
 		buf := make([]byte, 1000)
 		for i := 0; i < 10000; i++ {
-			if err := lb.client.SendDatagram(buf); err != nil {
-				break
+			if err := cc.SendDatagram(buf); err != nil {
+				return
 			}
 			atomic.AddInt64(&sent, 1)
 		}
@@ -229,15 +270,20 @@ func TestSendQueueAndCancellation(t *testing.T) {
 
 	select {
 	case <-done:
-		// It may complete if loopback drains fast; not a failure, but note it.
-		t.Logf("SendDatagram completed %d sends without blocking (loopback drained)", atomic.LoadInt64(&sent))
-	case <-time.After(300 * time.Millisecond):
-		n := atomic.LoadInt64(&sent)
-		t.Logf("SendDatagram blocked after %d sends (fixed %d-frame queue, no deadline/priority/drop)", n, 32)
+		t.Fatalf("SendDatagram completed all 10k sends over a 20 KB/s link — queue is not bounded/blocking as expected")
+	case <-time.After(500 * time.Millisecond):
 	}
+	n := atomic.LoadInt64(&sent)
+	// The queue is 32 frames; a handful may also be in flight / lost to CC.
+	if n > 200 {
+		t.Fatalf("SendDatagram accepted %d datagrams before blocking — expected it to stall near the 32-frame queue bound", n)
+	}
+	t.Logf("SendDatagram blocked after %d sends over a throttled link (fixed 32-frame queue, no byte bound / deadline / priority / drop)", n)
+
 	// FINDING: RED_MPUDP design §9.3 needs per-path control/latency/primary/
 	// replica queues bounded by packets AND bytes, with deadlines, tail-drop
 	// after deadline, and expired-replica drop. quic-go's single blocking
-	// 32-frame queue provides none of that; the queue layer would be rebuilt
+	// 32-frame queue (source: datagram_queue.go maxDatagramSendQueueLen=32,
+	// Add() blocks) provides none of that; the queue layer would be rebuilt
 	// above QUIC, and a blocking SendDatagram would stall the path actor.
 }

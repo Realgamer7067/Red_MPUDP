@@ -11,7 +11,7 @@ Raw run: `test/results/phase0/quic-datagram.txt`.
 | Requirement | Mechanism | Verdict |
 |---|---|---|
 | Caller-owned UDP socket | `quic.Transport{Conn: net.PacketConn}` + `Dial` / `Listen` | ✅ clean |
-| Interface bind (`SO_BINDTODEVICE`, `SO_MARK`) | applied on the caller's conn via `net.ListenConfig.Control` (needs `CAP_NET_ADMIN`) | ✅ same path M07 uses |
+| Interface bind (`SO_BINDTODEVICE`, `SO_MARK`) | the caller's conn is created with `net.ListenConfig.Control` — proven here only at the **API-shape** level (`TestInterfaceBoundSocket` skips without `CAP_NET_ADMIN`); the real socket-option behaviour is exercised in the M05/M07 privileged namespace suite | ✅ mechanism, ➖ not privileged-tested here |
 | Unreliable datagrams, no stream fallback | `Conn.SendDatagram` / `Conn.ReceiveDatagram` | ✅ |
 | `ReceiveDatagram` cancellation | honours `context` | ✅ |
 | Datagram support negotiation | `ConnectionState().SupportsDatagrams.{Local,Remote}` | ✅ |
@@ -22,7 +22,7 @@ Raw run: `test/results/phase0/quic-datagram.txt`.
 |---|---|---|
 | Know the current max datagram size **before** sending (§10 — never send oversized to discover the limit) | only via `*DatagramTooLargeError` **after** a rejected send; no getter | ❌ blocker |
 | Per-datagram / per-copy delivery + loss feedback (§8 PATH_REPORT, winner/rescue rate, per-path loss) | none exposed; tracked internally for CC only | ❌ blocker |
-| Send queue bounded by packets **and** bytes, with per-class priority, deadlines, tail-drop, expired-replica drop (§9.3) | one fixed **32-frame** FIFO; `SendDatagram` **blocks** when full | ❌ blocker |
+| Send queue bounded by packets **and** bytes, with per-class priority, deadlines, tail-drop, expired-replica drop (§9.3) | one fixed **32-frame** FIFO; `SendDatagram` **blocks** when full — demonstrated: over a 20 KB/s throttled socket it stalls after ~60 sends (`TestSendQueueBlocksWhenFull`) | ❌ blocker |
 | Explicit app-visible packet numbers for the replay/dedup windows (§6.2, §7) | QUIC packet numbers are internal; DATAGRAM frames carry no app sequence | ➖ we add our own header inside the datagram anyway |
 | Pace every DATA copy through an observable per-direction controller (§9.5) | QUIC CC (Cubic) is internal; no pacing hook, minimal observability | ⚠️ not enough for per-path replica budgets |
 | 4 independently keyed path copies | = 4 separate QUIC connections: 4 handshakes, 4 CC instances, 4× timers/state | ⚠️ heavy |
@@ -32,14 +32,14 @@ Raw run: `test/results/phase0/quic-datagram.txt`.
 
 | Metric | QUIC DATAGRAM | Noise transport (SPIKE-29..38) |
 |---|---:|---:|
-| send 1200 B | 6.7 µs/op, 10 allocs, 4.5 KB | seal 1180 B: 0.5 µs, 1 alloc, 16 B |
-| send+echo+recv 1200 B | 56 µs/op, 24 allocs, 8.5 KB | seal+open 1180 B: 1.06 µs, 2 allocs, 32 B |
-| echo RTT p50 / p99 / p99.9 | 91 µs / 414 µs / 761 µs | n/a (no round trip in the crypto bench) |
+| send 1200 B | 7–12 µs/op, **10 allocs, ~4.5 KB** | seal 1180 B: ~0.5 µs, 1 alloc, 16 B |
+| send+echo+recv 1200 B | 94–117 µs/op, **24 allocs, ~8.5 KB** | seal+open 1180 B: ~1.06 µs, 2 allocs, 32 B |
+| echo RTT p50 / p99 / p99.9 (loopback, sustained **10,000 pps**) | ~98 µs / ~560 µs / **~1.3 ms** | n/a (no round trip in the crypto bench) |
 
-(The latency harness sustains ~3.5k pps because of Go timer granularity at a
-100 µs tick, not a QUIC limit; the RTT distribution is still representative of
-per-datagram processing cost. p99.9 ≈ 0.76 ms of pure stack overhead on
-loopback is notable.)
+The latency harness uses a busy-deadline pacer and sustains a true 10,000 pps
+(`TestLatencyDistributionUnderLoad`, asserted floor 8,000). p99.9 ≈ 1.3 ms of
+pure stack overhead on loopback — with no wire delay — is notable for a
+latency-first design.
 
 ## Conclusion
 

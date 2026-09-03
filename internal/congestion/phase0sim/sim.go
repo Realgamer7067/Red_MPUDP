@@ -3,8 +3,8 @@
 // share a bottleneck fairly with a standard TCP-style flow (SPIKE-39..48).
 //
 // It is NOT the production controller. Milestone M17 builds that in
-// internal/congestion/{controller,pacer}.go; this package is removed once the
-// transport decision (SPIKE-66) is recorded.
+// internal/congestion/{controller,pacer}.go using this package as its starting
+// point (SPIKE-42..48 map directly onto CC-* / CC-FAIR-*), then removes it.
 package phase0sim
 
 import "math"
