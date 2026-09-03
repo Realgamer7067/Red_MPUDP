@@ -39,6 +39,8 @@ func runHelper(mode, addr string) {
 		os.Exit(0)
 	case "journal-recover":
 		os.Exit(journalRecoverInNamespace())
+	case "tun-plaintext":
+		os.Exit(tunPlaintextCheck())
 	default:
 		os.Exit(2)
 	}

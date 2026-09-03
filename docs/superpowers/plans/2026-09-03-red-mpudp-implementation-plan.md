@@ -649,41 +649,41 @@ Read and write complete IPv4 packets through a safely owned TUN interface.
 
 ### API and lifecycle
 
-- [ ] **TUN-01:** Create `internal/tun/tun.go` with a platform-neutral interface.
-- [ ] **TUN-02:** Add a non-Linux implementation returning a stable unsupported
+- [x] **TUN-01:** Create `internal/tun/tun.go` with a platform-neutral interface.
+- [x] **TUN-02:** Add a non-Linux implementation returning a stable unsupported
   error.
-- [ ] **TUN-03:** Create `internal/tun/tun_linux.go` with Linux build tags.
-- [ ] **TUN-04:** Open `/dev/net/tun` with close-on-exec behavior.
-- [ ] **TUN-05:** Request `IFF_TUN | IFF_NO_PI`.
-- [ ] **TUN-06:** Validate the requested interface name before ioctl.
-- [ ] **TUN-07:** Return the actual kernel-assigned name.
-- [ ] **TUN-08:** Ensure closing the object closes the file descriptor once.
-- [ ] **TUN-09:** Ensure a partial constructor failure closes the descriptor.
-- [ ] **TUN-10:** Keep the interface non-persistent in v1.
+- [x] **TUN-03:** Create `internal/tun/tun_linux.go` with Linux build tags.
+- [x] **TUN-04:** Open `/dev/net/tun` with close-on-exec behavior.
+- [x] **TUN-05:** Request `IFF_TUN | IFF_NO_PI`.
+- [x] **TUN-06:** Validate the requested interface name before ioctl.
+- [x] **TUN-07:** Return the actual kernel-assigned name.
+- [x] **TUN-08:** Ensure closing the object closes the file descriptor once.
+- [x] **TUN-09:** Ensure a partial constructor failure closes the descriptor.
+- [x] **TUN-10:** Keep the interface non-persistent in v1.
 
 ### Configuration
 
-- [ ] **TUN-11:** Set the configured IPv4 address using structured netlink
+- [x] **TUN-11:** Set the configured IPv4 address using structured netlink
   values.
-- [ ] **TUN-12:** Set the negotiated MTU.
-- [ ] **TUN-13:** Bring the interface up.
-- [ ] **TUN-14:** Read back and verify address, MTU, flags, and ifindex.
-- [ ] **TUN-15:** Reject an MTU outside 1112 through 1400 before netlink mutation.
-- [ ] **TUN-16:** Add a method to reduce MTU after PMTU negotiation.
-- [ ] **TUN-17:** Reject an attempted live increase unless the session has an
+- [x] **TUN-12:** Set the negotiated MTU.
+- [x] **TUN-13:** Bring the interface up.
+- [x] **TUN-14:** Read back and verify address, MTU, flags, and ifindex.
+- [x] **TUN-15:** Reject an MTU outside 1112 through 1400 before netlink mutation.
+- [x] **TUN-16:** Add a method to reduce MTU after PMTU negotiation.
+- [x] **TUN-17:** Reject an attempted live increase unless the session has an
   authenticated committed value.
 
 ### Packet I/O
 
-- [ ] **TUN-18:** Read one complete packet into a caller-owned buffer.
-- [ ] **TUN-19:** Distinguish context cancellation from permanent descriptor
+- [x] **TUN-18:** Read one complete packet into a caller-owned buffer.
+- [x] **TUN-19:** Distinguish context cancellation from permanent descriptor
   failure.
-- [ ] **TUN-20:** Reject a read larger than the configured packet buffer.
-- [ ] **TUN-21:** Write one complete packet from a caller-owned buffer.
-- [ ] **TUN-22:** Treat a short TUN write as an error.
-- [ ] **TUN-23:** Return every pooled buffer on read failure.
-- [ ] **TUN-24:** Return every pooled buffer on write failure.
-- [ ] **TUN-25:** Add packet and byte counters without unbounded labels.
+- [x] **TUN-20:** Reject a read larger than the configured packet buffer.
+- [x] **TUN-21:** Write one complete packet from a caller-owned buffer.
+- [x] **TUN-22:** Treat a short TUN write as an error.
+- [x] **TUN-23:** Return every pooled buffer on read failure.
+- [x] **TUN-24:** Return every pooled buffer on write failure.
+- [x] **TUN-25:** Add packet and byte counters without unbounded labels.
 
 ### Integration
 
@@ -692,16 +692,79 @@ Read and write complete IPv4 packets through a safely owned TUN interface.
 - [ ] **TUN-28:** Verify each interface starts at MTU 1180.
 - [ ] **TUN-29:** Pass one plaintext test-only IPv4 packet between a TUN reader
   and an in-memory peer.
-- [ ] **TUN-30:** Guard plaintext forwarding behind an integration-only build
+- [x] **TUN-30:** Guard plaintext forwarding behind an integration-only build
   tag.
-- [ ] **TUN-31:** Assert the release binary contains no plaintext forwarding
+- [x] **TUN-31:** Assert the release binary contains no plaintext forwarding
   switch or subcommand.
 
 ### Gate
 
-- [ ] TUN unit tests pass without root through mocks.
-- [ ] TUN namespace tests pass with root.
+- [x] TUN unit tests pass without root through mocks.
+- [ ] TUN namespace tests pass with root. *(blocked: privileged run — `TestTUNInNamespaces`)*
 - [ ] Descriptor and buffer leak checks pass on every constructor/error path.
+  *(buffer-leak paths TUN-23/24 unit-proven in `internal/tun`
+  `TestReadIntoReleasesBufferOnError` / `TestWriteFromAlwaysReleases`, and
+  release-exactly-once under `-tags debug` in `TestPooledHelpersReleaseExactlyOnce`;
+  the descriptor-leak check on a post-open constructor failure — TUN-09 — is
+  root-gated in `TestOpenClosesFDOnPostOpenFailure`, and the poller-integration
+  checks that Close / context-cancel unblock a parked real read
+  (`TestOpenRealTUNCloseUnblocksParkedRead`,
+  `TestOpenRealTUNContextCancelUnblocksParkedRead`) are root-gated too — all
+  blocked here)*
+
+### Status (2026-09-03)
+
+Landed:
+
+- `internal/tun`: platform-neutral `Device` interface + `Config` + bounded
+  `Stats` + typed errors (`tun.go`); `//go:build !linux` `Open` returning
+  `ErrUnsupported` (`tun_other.go`); Linux `Open` (`tun_linux.go`) that
+  validates the config before any descriptor is opened (name ≤ IFNAMSIZ-1,
+  MTU 1112–1400, IPv4 address), opens `/dev/net/tun` `O_CLOEXEC`, issues
+  `TUNSETIFF` with `IFF_TUN|IFF_NO_PI`, then uses
+  `jsimonetti/rtnetlink` to set MTU + `IFF_UP` and add the address as
+  structured values and read all of it back to verify. Every early return
+  after the descriptor is open closes it. `ReadPacket` takes a caller-owned
+  buffer larger than the max packet, distinguishes context cancellation
+  (`ctx.Err()`, not counted) from a permanent descriptor error, and drops +
+  counts an oversize packet rather than truncating. `WritePacket` treats a
+  short kernel write as `ErrShortWrite`. `SetMTU` reduces freely and refuses
+  an unauthenticated live increase. `Close` is `sync.Once` (one `close(fd)`);
+  the interface is non-persistent by default (v1 never issues `TUNSETPERSIST`,
+  TUN-10) and disappears with the descriptor. `ReadInto` / `WriteFrom`
+  operate on pooled `*packetbuf.Buffer` and release on every error path
+  (TUN-23/24). Counters are a fixed struct of `atomic.Uint64` (TUN-25).
+- Unit tests (`internal/tun`, no root) exercise the read/write/close/SetMTU
+  logic through an injected fake `io.ReadWriteCloser` + fake `linkConfigurer`
+  and cover every error path. `validate` and `guardMTU` are asserted directly
+  (`validate_internal_test.go`); `TestConfigValidationRunsBeforeOpen` proves
+  `Open` runs validation before it touches a descriptor.
+- Integration (`test/integration`, `integration` tag): `tun-plaintext` helper
+  mode opens `red0` inside a namespace, asserts MTU 1180, and moves a real
+  cleartext IPv4/UDP packet from the kernel through a TUN reader to an
+  in-memory peer (`forwardPlaintext`). The forwarder is behind the
+  `integration` build tag (TUN-30) — `go build ./cmd/...` cannot reach it.
+- `cmd/red-mpudp`: `TestNoPlaintextForwardingSubcommand` (no `forward` /
+  `plaintext` subcommand or help text) and `TestReleaseBinaryHasNoForwardingSymbols`
+  (a default-tags `go build` of the CLI contains none of the forwarder's
+  symbols) — TUN-31, both run here.
+
+Dependencies: `jsimonetti/rtnetlink v1.4.2` (+ `mdlayher/netlink v1.7.2`
+base) is now a direct dependency, brought forward from M08 for TUN-11. Adding
+it also completed the deferred `golang.org/x/crypto` + `golang.org/x/sys`
+bump; the Noise vector test was re-run against `x/crypto v0.50.0` and still
+passes. See `docs/development/dependencies.md`.
+
+Blocked on a privileged run (root + `ip`/`tc`/`nft`):
+
+- **TUN-26..29**, the "namespace tests pass with root" gate, the TUN-09
+  descriptor-leak check, and the poller-integration checks
+  (`TestOpenRealTUNCloseUnblocksParkedRead`,
+  `TestOpenRealTUNContextCancelUnblocksParkedRead` — first proof the Go runtime
+  poller accepts the `/dev/net/tun` fd, which both context cancellation and
+  Close rely on). Run `sudo -E env "PATH=$PATH" make test-integration` plus
+  `sudo -E env "PATH=$PATH" /usr/bin/go test ./internal/tun/` and check them
+  off once green.
 
 ### Checkpoint
 
