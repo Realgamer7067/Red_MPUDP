@@ -114,10 +114,11 @@ func (h LinuxHost) DeleteNFTable(t NFTableRecord) error {
 }
 
 // RestoreResolver is implemented in M20 alongside the resolver manager. Until
-// then it reports ErrResolverUnsupported, which Recover surfaces as a deferred
-// gap (Report.ResolverDeferred) rather than a fail-closed error: the operator
-// must restore resolver configuration for manager %q by hand, or re-run once
-// the manager lands.
+// then it reports ErrResolverUnsupported, which Recover treats as a phase-1
+// failure (design §11.5): a journal that recorded resolver state cannot be
+// fully recovered by this host, and the kill switch is retained. The operator
+// must restore resolver configuration for the named manager by hand and re-run
+// once it verifies clean, or remove the resolver record from the journal.
 func (h LinuxHost) RestoreResolver(r ResolverRecord) error {
-	return fmt.Errorf("%w (manager %q; restore /etc/resolv.conf or the resolved link manually)", ErrResolverUnsupported, r.Manager)
+	return fmt.Errorf("%w (manager %q; restore /etc/resolv.conf or the resolved link manually, then re-run)", ErrResolverUnsupported, r.Manager)
 }

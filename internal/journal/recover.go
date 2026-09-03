@@ -23,9 +23,13 @@ type Host interface {
 type Logf func(format string, args ...any)
 
 // ErrResolverUnsupported is returned by a Host whose resolver-restore path is
-// not yet implemented (the LinuxHost resolver manager lands in M20). Recover
-// treats it as a reported gap, not a phase-1 failure: an unrestored resolver
-// setting does not leak traffic, so it must not hold the kill switch closed.
+// not yet implemented (the LinuxHost resolver manager lands in M20). Recovery
+// treats it as a phase-1 failure: design §11.5 restores resolver state before
+// removing rules, routes, or the kill switch, because tearing down routing
+// while the resolver still points at a tunnel-only server can send DNS off the
+// tunnel. Until resolver restore is implemented, a journal that recorded
+// resolver state cannot be fully recovered by this host, and the kill switch
+// stays fail-closed.
 var ErrResolverUnsupported = errors.New("journal: resolver restore not supported by this host")
 
 // Report summarizes what a Recover call did.
@@ -37,11 +41,6 @@ type Report struct {
 	TablesRemoved    int
 	NFTablesRemoved  int
 	ResolverRestored bool
-
-	// ResolverDeferred is true when the journal recorded resolver state but the
-	// host cannot restore it yet (ErrResolverUnsupported). The operator must
-	// restore resolver configuration manually or re-run once the manager lands.
-	ResolverDeferred bool
 
 	// KillSwitchRetained is true when an earlier phase failed and recovery
 	// deliberately left the fail-closed nftables table (and owned route
@@ -97,18 +96,15 @@ func Recover(j *Journal, role Role, instanceID string, h Host, logf Logf) (Repor
 		rep.RulesRemoved++
 	}
 
-	// Phase 1b: resolver state. A host that cannot restore it yet
-	// (ErrResolverUnsupported) is a reported gap, not a phase-1 failure — an
-	// unrestored resolver does not leak traffic.
+	// Phase 1b: resolver state. Per design §11.5 this must succeed before any
+	// rule, route, or kill-switch removal; a failure — including a host that
+	// cannot restore the resolver yet — halts recovery with the kill switch
+	// retained.
 	if j.Resolver != nil {
-		switch err := h.RestoreResolver(*j.Resolver); {
-		case err == nil:
-			rep.ResolverRestored = true
-		case errors.Is(err, ErrResolverUnsupported):
-			rep.ResolverDeferred = true
-			logf("resolver state recorded but not restored: %v", err)
-		default:
+		if err := h.RestoreResolver(*j.Resolver); err != nil {
 			phase1 = append(phase1, fmt.Errorf("restore resolver: %w", err))
+		} else {
+			rep.ResolverRestored = true
 		}
 	}
 

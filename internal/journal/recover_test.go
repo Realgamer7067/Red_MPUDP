@@ -224,9 +224,11 @@ func TestRecoverRetainsKillSwitchOnPhase1Failure(t *testing.T) {
 	}
 }
 
-// A host that cannot restore resolver state yet is a reported gap, not a
-// phase-1 failure: recovery still reaches phase 2 and removes the kill switch.
-func TestRecoverResolverUnsupportedIsDeferredNotFatal(t *testing.T) {
+// Final review: a resolver restore that cannot run yet (ErrResolverUnsupported)
+// is a phase-1 failure — design §11.5 restores the resolver before removing
+// routes or the kill switch, so an unrestored resolver must not let the kill
+// switch come down.
+func TestRecoverResolverUnsupportedIsPhase1Failure(t *testing.T) {
 	j := validJournal()
 	j.Resolver = &ResolverRecord{Manager: "resolv-conf", Prior: "nameserver 192.0.2.1\n"}
 	h := newFakeHost()
@@ -234,22 +236,24 @@ func TestRecoverResolverUnsupportedIsDeferredNotFatal(t *testing.T) {
 	h.resolverUnsupported = true
 
 	rep, err := Recover(j, RoleClient, j.InstanceID, h, nil)
-	if err != nil {
-		t.Fatalf("Recover: %v", err)
+	if err == nil {
+		t.Fatal("expected recovery to halt on an unrestorable resolver")
 	}
-	if !rep.ResolverDeferred || rep.ResolverRestored {
-		t.Fatalf("resolver should be deferred, not restored: %+v", rep)
+	if !errors.Is(err, ErrResolverUnsupported) {
+		t.Fatalf("error should wrap ErrResolverUnsupported: %v", err)
 	}
-	if rep.NFTablesRemoved != 1 || rep.TablesRemoved != 2 {
-		t.Fatalf("phase 2 should still run: %+v", rep)
+	if rep.ResolverRestored {
+		t.Fatal("ResolverRestored set despite the failure")
 	}
-	if rep.KillSwitchRetained {
-		t.Fatal("kill switch retained for a merely-deferred resolver")
+	if rep.NFTablesRemoved != 0 || len(h.nftDeleted) != 0 || rep.TablesRemoved != 0 {
+		t.Fatalf("phase 2 ran despite an unrestorable resolver: %+v", rep)
+	}
+	if !rep.KillSwitchRetained {
+		t.Fatal("kill switch not retained on an unrestorable resolver")
 	}
 }
 
-// A hard resolver-restore failure IS a phase-1 failure and holds the kill
-// switch closed.
+// A hard resolver-restore failure is likewise a phase-1 failure.
 func TestRecoverHardResolverFailureGatesPhase2(t *testing.T) {
 	j := validJournal()
 	j.Resolver = &ResolverRecord{Manager: "resolv-conf", Prior: "x"}

@@ -76,13 +76,15 @@ func cmdCleanup(args []string, stdout, stderr io.Writer) int {
 	for _, k := range rep.SysctlConflicts {
 		fmt.Fprintf(stdout, "  sysctl %s preserved (operator-modified)\n", k)
 	}
-	if rep.ResolverDeferred {
-		fmt.Fprintln(stderr, "red-mpudp: resolver state was recorded but not restored automatically; restore /etc/resolv.conf or the systemd-resolved link manually")
-	}
 	if rep.KillSwitchRetained {
 		fmt.Fprintln(stderr, "red-mpudp: kill switch retained fail-closed; re-run cleanup after resolving the errors above")
 	}
 	if err != nil {
+		if errors.Is(err, journal.ErrResolverUnsupported) {
+			fmt.Fprintln(stderr, "red-mpudp: this build cannot restore resolver state yet (arrives in a later milestone).")
+			fmt.Fprintln(stderr, "red-mpudp: restore /etc/resolv.conf or the systemd-resolved link manually, then re-run;")
+			fmt.Fprintln(stderr, "red-mpudp: the kill switch stays in place until the whole journal recovers cleanly.")
+		}
 		fmt.Fprintf(stderr, "red-mpudp: recovery incomplete: %v\n", err)
 		return exitRuntime
 	}

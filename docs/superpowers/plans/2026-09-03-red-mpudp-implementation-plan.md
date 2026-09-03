@@ -598,9 +598,12 @@ Landed:
   phase 1 (routes, rules, resolver, sysctls with restore-only-if-unchanged /
   preserve-and-report) → gate → phase 2a (owned route-table flush) → gate →
   phase 2b (nftables kill switch, last). A failure in phase 1 **or** phase 2a
-  retains the kill switch fail-closed (`Report.KillSwitchRetained`); a
-  resolver manager that is not implemented yet (`ErrResolverUnsupported`) is a
-  reported gap (`Report.ResolverDeferred`), not a fail-closed error.
+  retains the kill switch fail-closed (`Report.KillSwitchRetained`). Per
+  design §11.5 resolver restore precedes rule/route/kill-switch removal, so a
+  resolver-restore failure — including a host whose resolver manager is not
+  implemented yet (`ErrResolverUnsupported`, LinuxHost until M20) — is a
+  phase-1 failure: `cleanup` exits non-zero, the kill switch stays in place,
+  and the operator is told to restore resolver config by hand and re-run.
   `LinuxHost.DeleteRoute` matches on the recorded metric. All covered by unit
   tests against a fake `Host`.
   `red-mpudp cleanup --state-file <path> [--role client|server] [--instance <id>]`
