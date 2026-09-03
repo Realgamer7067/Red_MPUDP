@@ -3,6 +3,12 @@
 // network activity occurs. Loading is strict: unknown fields and duplicate keys
 // are errors, durations and addresses are typed, and every numeric bound from
 // the design is enforced here rather than at the point of use.
+//
+// Defaults are applied before validation. A numeric field left at its zero
+// value is therefore indistinguishable from "unset" and is replaced by the
+// documented default (CONF-10, CONF-11); range checks such as "positive pacing
+// rate" run against the post-default value and catch only genuinely
+// out-of-range input (for example a negative rate).
 package config
 
 import (

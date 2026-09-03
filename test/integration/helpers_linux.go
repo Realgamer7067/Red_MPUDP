@@ -10,8 +10,9 @@ import (
 )
 
 // runHelper is invoked from TestMain when RED_MPUDP_HELPER is set: the process
-// is a re-exec of the test binary running inside internet-ns as a target
-// server. It runs until killed.
+// is a re-exec of the test binary running inside a namespace. The echo/dns
+// modes are long-lived targets in internet-ns; probe-tcp is a one-shot
+// reachability check run from client-ns.
 func runHelper(mode, addr string) {
 	switch mode {
 	case "udp-echo":
@@ -20,6 +21,16 @@ func runHelper(mode, addr string) {
 		tcpEcho(addr)
 	case "dns":
 		dnsStub(addr)
+	case "probe-tcp":
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		c, err := waitDial(ctx, "tcp", addr)
+		if err != nil {
+			os.Exit(1)
+		}
+		_, _ = c.Write([]byte("ping"))
+		c.Close()
+		os.Exit(0)
 	default:
 		os.Exit(2)
 	}

@@ -89,7 +89,7 @@ type ResolverRecord struct {
 
 var (
 	instanceIDRe = regexp.MustCompile(`^[A-Za-z0-9._-]{8,128}$`)
-	sysctlKeyRe  = regexp.MustCompile(`^[a-z0-9_]+(\.[a-z0-9_]+)+$`)
+	sysctlNameRe = regexp.MustCompile(`^[a-z0-9_]+(\.[a-z0-9_]+)+$`)
 	devNameRe    = regexp.MustCompile(`^[A-Za-z0-9._-]{1,15}$`)
 	nftNameRe    = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 )
@@ -141,8 +141,8 @@ func (j *Journal) Validate() error {
 		}
 	}
 	for i, s := range j.Sysctls {
-		if !sysctlKeyRe.MatchString(s.Name) {
-			return fmt.Errorf("journal: sysctls[%d]: malformed key %q", i, s.Name)
+		if !sysctlNameRe.MatchString(s.Name) {
+			return fmt.Errorf("journal: sysctls[%d]: malformed name %q", i, s.Name)
 		}
 	}
 	return nil

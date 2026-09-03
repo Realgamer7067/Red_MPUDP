@@ -94,8 +94,14 @@ func TestTopologyLifecycle(t *testing.T) {
 	}
 }
 
-// TestFailedTestLeavesNoNamespace is the gate clause 2: a deliberately failing
-// assertion inside a topology block must still tear the topology down.
+// TestFailedTestLeavesNoNamespace covers gate clause 2. What it actually
+// proves: a t.Fatalf after `defer top.Close()` still runs Close (Fatalf calls
+// runtime.Goexit, which runs deferred funcs), so the deferred-cleanup path
+// leaves no namespace behind. What it does NOT prove and still needs the
+// privileged run: a Fatalf *inside* NewTopology before its own defer is set —
+// that path is handled by NewTopology calling top.Close() before every
+// t.Fatalf, and by TestTopologyLifecycle's per-round leak assertion. Do not
+// check the gate box on this test alone.
 func TestFailedTestLeavesNoNamespace(t *testing.T) {
 	skipUnlessPrivileged(t)
 
@@ -117,27 +123,33 @@ func TestFailedTestLeavesNoNamespace(t *testing.T) {
 	}
 }
 
+// clientCanReachInternet re-execs the test binary inside client-ns in
+// probe-tcp mode: it dials the TCP-echo target in internet-ns end to end
+// through the server relay. This is a stronger check than ICMP and needs no
+// tool outside preflight's requiredTools set.
 func clientCanReachInternet(ctx context.Context, top *Topology) error {
-	// Use `ip netns exec` + the test binary's own dialer is not reachable from
-	// inside the namespace, so shell out to a one-shot nc-style probe via the
-	// helper: simplest portable check is an ICMP ping to the internet uplink.
 	c := nsName(nsClient, top.suffix)
-	deadline := time.Now().Add(2 * time.Second)
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(3 * time.Second)
+	}
 	var lastErr error
 	for time.Now().Before(deadline) {
-		out, err := exec.Command("ip", "netns", "exec", c, "ping", "-c", "1", "-W", "1", uplinkInternet).CombinedOutput()
+		cmd := exec.Command("ip", "netns", "exec", c, os.Args[0], "-test.run=TestMainHelperNoop")
+		cmd.Env = append(os.Environ(), "RED_MPUDP_HELPER=probe-tcp", "RED_MPUDP_HELPER_ADDR="+uplinkInternet+":7")
+		out, err := cmd.CombinedOutput()
 		if err == nil {
 			return nil
 		}
-		lastErr = &pingError{string(out), err}
+		lastErr = &probeError{string(out), err}
 		time.Sleep(100 * time.Millisecond)
 	}
 	return lastErr
 }
 
-type pingError struct {
+type probeError struct {
 	out string
 	err error
 }
 
-func (e *pingError) Error() string { return e.err.Error() + ": " + e.out }
+func (e *probeError) Error() string { return e.err.Error() + ": " + e.out }

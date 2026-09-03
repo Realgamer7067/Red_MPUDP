@@ -25,6 +25,11 @@ jobs:
       - name: fail on unformatted files
         run: test ! -s /tmp/gofmt.out
       - run: go vet ./...
+      # The privileged integration harness is behind the `integration` build
+      # tag and never runs on a PR (it needs root). Vet it explicitly so a
+      # rename in internal/ cannot break it unnoticed until someone runs
+      # `make test-integration`.
+      - run: go vet -tags integration ./test/...
 
   test:
     runs-on: ubuntu-latest
