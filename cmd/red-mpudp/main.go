@@ -27,7 +27,7 @@ subcommands:
   check-config server <file>    parse and validate a server configuration
   client <file>                 parse a client configuration and prepare to run
   server <file>                 parse a server configuration and prepare to run
-  cleanup --role client|server  undo host changes recorded in a mutation journal
+  cleanup --state-file <path>   undo host changes recorded in a mutation journal
 
 Secrets are always file references. They are never accepted as command-line
 flags.`

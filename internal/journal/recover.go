@@ -22,6 +22,12 @@ type Host interface {
 // Logf receives human-readable progress and conflict notices.
 type Logf func(format string, args ...any)
 
+// ErrResolverUnsupported is returned by a Host whose resolver-restore path is
+// not yet implemented (the LinuxHost resolver manager lands in M20). Recover
+// treats it as a reported gap, not a phase-1 failure: an unrestored resolver
+// setting does not leak traffic, so it must not hold the kill switch closed.
+var ErrResolverUnsupported = errors.New("journal: resolver restore not supported by this host")
+
 // Report summarizes what a Recover call did.
 type Report struct {
 	SysctlsRestored  []string
@@ -31,6 +37,11 @@ type Report struct {
 	TablesRemoved    int
 	NFTablesRemoved  int
 	ResolverRestored bool
+
+	// ResolverDeferred is true when the journal recorded resolver state but the
+	// host cannot restore it yet (ErrResolverUnsupported). The operator must
+	// restore resolver configuration manually or re-run once the manager lands.
+	ResolverDeferred bool
 
 	// KillSwitchRetained is true when an earlier phase failed and recovery
 	// deliberately left the fail-closed nftables table (and owned route
@@ -86,12 +97,18 @@ func Recover(j *Journal, role Role, instanceID string, h Host, logf Logf) (Repor
 		rep.RulesRemoved++
 	}
 
-	// Phase 1b: resolver state.
+	// Phase 1b: resolver state. A host that cannot restore it yet
+	// (ErrResolverUnsupported) is a reported gap, not a phase-1 failure — an
+	// unrestored resolver does not leak traffic.
 	if j.Resolver != nil {
-		if err := h.RestoreResolver(*j.Resolver); err != nil {
-			phase1 = append(phase1, fmt.Errorf("restore resolver: %w", err))
-		} else {
+		switch err := h.RestoreResolver(*j.Resolver); {
+		case err == nil:
 			rep.ResolverRestored = true
+		case errors.Is(err, ErrResolverUnsupported):
+			rep.ResolverDeferred = true
+			logf("resolver state recorded but not restored: %v", err)
+		default:
+			phase1 = append(phase1, fmt.Errorf("restore resolver: %w", err))
 		}
 	}
 
@@ -128,25 +145,35 @@ func Recover(j *Journal, role Role, instanceID string, h Host, logf Logf) (Repor
 		return rep, fmt.Errorf("journal: recovery halted before removing the kill switch: %w", errors.Join(phase1...))
 	}
 
-	// Phase 2: safe to open traffic. Owned route tables, then the fail-closed
-	// nftables table last.
-	var phase2 []error
+	// Phase 2a: flush owned route tables. If any fails, the kill switch stays
+	// in place fail-closed — the tunnel route tables are still partly present,
+	// so opening traffic now could route it wrong.
+	var tableErrs []error
 	for _, id := range j.Tables {
 		if err := h.DeleteRouteTable(id); err != nil {
-			phase2 = append(phase2, fmt.Errorf("delete route table %d: %w", id, err))
+			tableErrs = append(tableErrs, fmt.Errorf("delete route table %d: %w", id, err))
 			continue
 		}
 		rep.TablesRemoved++
 	}
+	if len(tableErrs) > 0 {
+		rep.KillSwitchRetained = len(j.NFTables) > 0
+		logf("route-table flush failed; retaining %d nftables kill-switch table(s) fail-closed", len(j.NFTables))
+		return rep, fmt.Errorf("journal: recovery halted before removing the kill switch: %w", errors.Join(tableErrs...))
+	}
+
+	// Phase 2b: remove the fail-closed nftables kill-switch table last.
+	var nftErrs []error
 	for _, t := range j.NFTables {
 		if err := h.DeleteNFTable(t); err != nil {
-			phase2 = append(phase2, fmt.Errorf("delete nftables table %s/%s: %w", t.Family, t.Name, err))
+			nftErrs = append(nftErrs, fmt.Errorf("delete nftables table %s/%s: %w", t.Family, t.Name, err))
 			continue
 		}
 		rep.NFTablesRemoved++
 	}
-	if len(phase2) > 0 {
-		return rep, errors.Join(phase2...)
+	if len(nftErrs) > 0 {
+		rep.KillSwitchRetained = rep.NFTablesRemoved < len(j.NFTables)
+		return rep, errors.Join(nftErrs...)
 	}
 	return rep, nil
 }

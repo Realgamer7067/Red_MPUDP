@@ -2,6 +2,7 @@ package journal
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -16,8 +17,11 @@ type fakeHost struct {
 	sysctlSet     map[string]string
 	resolver      int
 
-	failDeleteRoute   bool
-	failDeleteNFTable bool
+	failDeleteRoute      bool
+	failDeleteRouteTable bool
+	failDeleteNFTable    bool
+	resolverUnsupported  bool
+	failResolverHard     bool
 }
 
 func newFakeHost() *fakeHost {
@@ -48,6 +52,9 @@ func (h *fakeHost) DeleteRule(r RuleRecord) error {
 	return nil
 }
 func (h *fakeHost) DeleteRouteTable(id uint32) error {
+	if h.failDeleteRouteTable {
+		return errors.New("boom")
+	}
 	h.tablesDeleted = append(h.tablesDeleted, id)
 	return nil
 }
@@ -58,7 +65,16 @@ func (h *fakeHost) DeleteNFTable(t NFTableRecord) error {
 	h.nftDeleted = append(h.nftDeleted, t)
 	return nil
 }
-func (h *fakeHost) RestoreResolver(ResolverRecord) error { h.resolver++; return nil }
+func (h *fakeHost) RestoreResolver(ResolverRecord) error {
+	if h.resolverUnsupported {
+		return fmt.Errorf("%w (test)", ErrResolverUnsupported)
+	}
+	if h.failResolverHard {
+		return errors.New("resolver boom")
+	}
+	h.resolver++
+	return nil
+}
 
 func TestRecoverHappyPath(t *testing.T) {
 	j := validJournal()
@@ -208,9 +224,71 @@ func TestRecoverRetainsKillSwitchOnPhase1Failure(t *testing.T) {
 	}
 }
 
-// A phase-2 failure (kill-switch removal) is still reported, but only reached
-// once phase 1 is clean.
-func TestRecoverReportsPhase2Errors(t *testing.T) {
+// A host that cannot restore resolver state yet is a reported gap, not a
+// phase-1 failure: recovery still reaches phase 2 and removes the kill switch.
+func TestRecoverResolverUnsupportedIsDeferredNotFatal(t *testing.T) {
+	j := validJournal()
+	j.Resolver = &ResolverRecord{Manager: "resolv-conf", Prior: "nameserver 192.0.2.1\n"}
+	h := newFakeHost()
+	h.sysctl["net.ipv4.ip_forward"] = "1"
+	h.resolverUnsupported = true
+
+	rep, err := Recover(j, RoleClient, j.InstanceID, h, nil)
+	if err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	if !rep.ResolverDeferred || rep.ResolverRestored {
+		t.Fatalf("resolver should be deferred, not restored: %+v", rep)
+	}
+	if rep.NFTablesRemoved != 1 || rep.TablesRemoved != 2 {
+		t.Fatalf("phase 2 should still run: %+v", rep)
+	}
+	if rep.KillSwitchRetained {
+		t.Fatal("kill switch retained for a merely-deferred resolver")
+	}
+}
+
+// A hard resolver-restore failure IS a phase-1 failure and holds the kill
+// switch closed.
+func TestRecoverHardResolverFailureGatesPhase2(t *testing.T) {
+	j := validJournal()
+	j.Resolver = &ResolverRecord{Manager: "resolv-conf", Prior: "x"}
+	h := newFakeHost()
+	h.sysctl["net.ipv4.ip_forward"] = "1"
+	h.failResolverHard = true
+
+	rep, err := Recover(j, RoleClient, j.InstanceID, h, nil)
+	if err == nil {
+		t.Fatal("expected a phase-1 failure")
+	}
+	if rep.NFTablesRemoved != 0 || !rep.KillSwitchRetained {
+		t.Fatalf("kill switch not retained on a hard resolver failure: %+v", rep)
+	}
+}
+
+// Second review, blocker 2: a route-table flush failure must gate nftables
+// removal — the kill switch stays fail-closed.
+func TestRecoverRouteTableFailureGatesNFTables(t *testing.T) {
+	j := validJournal()
+	h := newFakeHost()
+	h.sysctl["net.ipv4.ip_forward"] = "1"
+	h.failDeleteRouteTable = true
+
+	rep, err := Recover(j, RoleClient, j.InstanceID, h, nil)
+	if err == nil {
+		t.Fatal("expected recovery to halt on a route-table flush failure")
+	}
+	if len(h.nftDeleted) != 0 || rep.NFTablesRemoved != 0 {
+		t.Fatalf("nftables kill switch removed despite a route-table failure: %+v", rep)
+	}
+	if !rep.KillSwitchRetained {
+		t.Fatalf("KillSwitchRetained not set: %+v", rep)
+	}
+}
+
+// The nftables kill-switch removal itself failing is reported and the switch is
+// recorded as retained (it is still installed).
+func TestRecoverNFTableRemovalFailure(t *testing.T) {
 	j := validJournal()
 	h := newFakeHost()
 	h.sysctl["net.ipv4.ip_forward"] = "1"
@@ -223,7 +301,7 @@ func TestRecoverReportsPhase2Errors(t *testing.T) {
 	if rep.RoutesRemoved != 1 || rep.RulesRemoved != 1 || rep.TablesRemoved != 2 {
 		t.Fatalf("phase 1 and route-table flush should have completed: %+v", rep)
 	}
-	if rep.KillSwitchRetained {
-		t.Fatal("KillSwitchRetained should not be set for a phase-2 failure")
+	if !rep.KillSwitchRetained {
+		t.Fatal("KillSwitchRetained should be set when the nftables delete fails")
 	}
 }

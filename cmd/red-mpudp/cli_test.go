@@ -137,54 +137,53 @@ func TestCheckConfig(t *testing.T) {
 func TestCleanupRefusesBadJournal(t *testing.T) {
 	dir := t.TempDir()
 
+	// --state-file is the documented invocation (design §11.5); it is required.
 	if code, _, _ := exec("cleanup"); code != exitUsage {
-		t.Fatalf("cleanup with no --role: exit=%d", code)
+		t.Fatalf("cleanup with no --state-file: exit=%d", code)
 	}
-	if code, _, _ := exec("cleanup", "--state-file", filepath.Join(dir, "x")); code != exitUsage {
-		t.Fatalf("cleanup without --role: exit=%d", code)
-	}
-	if code, _, errs := exec("cleanup", "--role", "client", "--state-file", filepath.Join(dir, "absent")); code != exitConfig {
+	if code, _, errs := exec("cleanup", "--state-file", filepath.Join(dir, "absent")); code != exitConfig {
 		t.Fatalf("cleanup missing journal: exit=%d (%s)", code, errs)
 	}
 	bad := filepath.Join(dir, "bad.journal")
 	os.WriteFile(bad, []byte("{ garbage"), 0o600)
-	if code, _, _ := exec("cleanup", "--role", "client", "--state-file", bad); code != exitConfig {
+	if code, _, _ := exec("cleanup", "--state-file", bad); code != exitConfig {
 		t.Fatalf("cleanup malformed journal: exit=%d", code)
 	}
 	wrongSchema := filepath.Join(dir, "v9.journal")
 	os.WriteFile(wrongSchema, []byte(`{"schema":9,"role":"client","instance_id":"red-mpudp-01"}`), 0o600)
-	if code, _, _ := exec("cleanup", "--role", "client", "--state-file", wrongSchema); code != exitConfig {
+	if code, _, _ := exec("cleanup", "--state-file", wrongSchema); code != exitConfig {
 		t.Fatalf("cleanup wrong schema: exit=%d", code)
 	}
 	// Trailing data after the JSON document is rejected.
 	trailing := filepath.Join(dir, "trailing.journal")
 	os.WriteFile(trailing, []byte(`{"schema":1,"role":"client","instance_id":"red-mpudp-x01"}`+"\n{}\n"), 0o600)
-	if code, _, _ := exec("cleanup", "--role", "client", "--state-file", trailing); code != exitConfig {
+	if code, _, _ := exec("cleanup", "--state-file", trailing); code != exitConfig {
 		t.Fatalf("cleanup trailing JSON: exit=%d", code)
 	}
-	// Blocker 6: journal role must match the operator's --role assertion.
-	mismatch := filepath.Join(dir, "server.journal")
-	os.WriteFile(mismatch, []byte(`{"schema":1,"role":"server","instance_id":"red-mpudp-s01","created_at":"2026-01-01T00:00:00Z"}`), 0o600)
-	if code, _, errs := exec("cleanup", "--role", "client", "--state-file", mismatch); code != exitConfig {
-		t.Fatalf("cleanup role mismatch: exit=%d (%s)", code, errs)
+	// Optional --role pin: a mismatch is refused.
+	server := filepath.Join(dir, "server.journal")
+	os.WriteFile(server, []byte(`{"schema":1,"role":"server","instance_id":"red-mpudp-s01","created_at":"2026-01-01T00:00:00Z"}`), 0o600)
+	if code, _, errs := exec("cleanup", "--state-file", server, "--role", "client"); code != exitConfig {
+		t.Fatalf("cleanup --role mismatch: exit=%d (%s)", code, errs)
 	}
-	// Blocker 8: a group-readable journal is refused.
+	// Blocker 8: a group-readable journal is refused regardless of --role.
 	loose := filepath.Join(dir, "loose.journal")
 	os.WriteFile(loose, []byte(`{"schema":1,"role":"client","instance_id":"red-mpudp-l01","created_at":"2026-01-01T00:00:00Z"}`), 0o600)
 	if err := os.Chmod(loose, 0o640); err != nil {
 		t.Fatal(err)
 	}
-	if code, _, _ := exec("cleanup", "--role", "client", "--state-file", loose); code != exitConfig {
+	if code, _, _ := exec("cleanup", "--state-file", loose); code != exitConfig {
 		t.Fatalf("cleanup group-readable journal: exit=%d", code)
 	}
 }
 
-// A well-formed journal with nothing to undo cleans up successfully.
+// The documented invocation — just --state-file — recovers a well-formed
+// journal with nothing to undo.
 func TestCleanupEmptyJournal(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "empty.journal")
 	os.WriteFile(p, []byte(`{"schema":1,"role":"client","instance_id":"red-mpudp-empty01","created_at":"2026-01-01T00:00:00Z"}`), 0o600)
-	if code, out, errs := exec("cleanup", "--role", "client", "--state-file", p); code != exitOK {
+	if code, out, errs := exec("cleanup", "--state-file", p); code != exitOK {
 		t.Fatalf("cleanup empty journal: exit=%d out=%q err=%q", code, out, errs)
 	}
 }

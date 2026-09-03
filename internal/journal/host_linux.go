@@ -113,8 +113,11 @@ func (h LinuxHost) DeleteNFTable(t NFTableRecord) error {
 	return idempotentDelete(run(nft, "delete", "table", t.Family, t.Name))
 }
 
-// RestoreResolver is implemented in M20 alongside the resolver manager; until
-// then it refuses rather than silently doing nothing.
+// RestoreResolver is implemented in M20 alongside the resolver manager. Until
+// then it reports ErrResolverUnsupported, which Recover surfaces as a deferred
+// gap (Report.ResolverDeferred) rather than a fail-closed error: the operator
+// must restore resolver configuration for manager %q by hand, or re-run once
+// the manager lands.
 func (h LinuxHost) RestoreResolver(r ResolverRecord) error {
-	return fmt.Errorf("journal: resolver restore for manager %q is implemented in a later milestone", r.Manager)
+	return fmt.Errorf("%w (manager %q; restore /etc/resolv.conf or the resolved link manually)", ErrResolverUnsupported, r.Manager)
 }

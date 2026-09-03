@@ -49,6 +49,24 @@ func nsPrefix() string { return "rmp-" }
 
 func nsSuffix() string { return "-" + runID }
 
+// vethTok is a short run token for root-side veth names. Root-namespace link
+// names must be <= 15 bytes (IFNAMSIZ-1) and are global, so concurrent runs
+// must not collide: "v" + 8 hex + 2 = 11 bytes, run-unique.
+var vethTok = func() string {
+	if len(runID) >= 8 {
+		return runID[:8]
+	}
+	return runID
+}()
+
+// rv returns the run-scoped root-side name for a veth end ("a0","a1","b0",...).
+func rv(end string) string { return "v" + vethTok + end }
+
+// rootVethEnds are every run-scoped root-side veth name, for cleanup. Deleting
+// one end of a pair removes its peer, but listing both covers every
+// partial-setup state.
+var rootVethEnds = []string{rv("a0"), rv("a1"), rv("b0"), rv("b1"), rv("u0"), rv("u1")}
+
 // Deterministic addressing (HARNESS-15).
 const (
 	pathASubnet = "10.77.1.0/24"
@@ -67,11 +85,6 @@ const (
 	dnsPort  = 53
 )
 
-// rootVeths are the veth ends as first created in the root namespace, before
-// being moved. Deleting one end deletes its peer, so cleaning these up covers
-// every partial-setup state.
-var rootVeths = []string{"pa0", "pb0", "up0"}
-
 // Link identifies one impairable link end for the netem helpers.
 type Link struct {
 	ns  nsKey
@@ -86,6 +99,12 @@ var (
 	PathBServerSide = Link{keyServer, "pb1"}
 )
 
+// target is one long-lived helper process and its captured-output file.
+type target struct {
+	cmd *exec.Cmd
+	log *os.File
+}
+
 // Topology is a live three-namespace test network. Build one with NewTopology
 // and always defer Close.
 type Topology struct {
@@ -93,8 +112,7 @@ type Topology struct {
 
 	mu      sync.Mutex
 	created bool // at least one ip command ran; cleanup is warranted
-	procs   []*exec.Cmd
-	logs    []*os.File
+	targets []target
 }
 
 // NewTopology creates client/server/internet namespaces, both veth paths, the
@@ -122,22 +140,24 @@ func NewTopology(t testing.TB) *Topology {
 		return nil // unreachable
 	}
 
+	// Create each veth pair with run-scoped root-side names, then move each end
+	// into its namespace and rename it to the stable namespace-local name.
 	steps := [][]string{
 		{"netns", "add", c},
 		{"netns", "add", s},
 		{"netns", "add", i},
 
-		{"link", "add", "pa0", "type", "veth", "peer", "name", "pa1"},
-		{"link", "set", "pa0", "netns", c},
-		{"link", "set", "pa1", "netns", s},
+		{"link", "add", rv("a0"), "type", "veth", "peer", "name", rv("a1")},
+		{"link", "set", rv("a0"), "netns", c, "name", "pa0"},
+		{"link", "set", rv("a1"), "netns", s, "name", "pa1"},
 
-		{"link", "add", "pb0", "type", "veth", "peer", "name", "pb1"},
-		{"link", "set", "pb0", "netns", c},
-		{"link", "set", "pb1", "netns", s},
+		{"link", "add", rv("b0"), "type", "veth", "peer", "name", rv("b1")},
+		{"link", "set", rv("b0"), "netns", c, "name", "pb0"},
+		{"link", "set", rv("b1"), "netns", s, "name", "pb1"},
 
-		{"link", "add", "up0", "type", "veth", "peer", "name", "up1"},
-		{"link", "set", "up0", "netns", s},
-		{"link", "set", "up1", "netns", i},
+		{"link", "add", rv("u0"), "type", "veth", "peer", "name", rv("u1")},
+		{"link", "set", rv("u0"), "netns", s, "name", "up0"},
+		{"link", "set", rv("u1"), "netns", i, "name", "up1"},
 	}
 	for _, args := range steps {
 		if err := ipRoot(args...); err != nil {
@@ -199,25 +219,24 @@ func NewTopology(t testing.TB) *Topology {
 // once.
 func (top *Topology) Close() {
 	top.mu.Lock()
-	procs, logs := top.procs, top.logs
-	top.procs, top.logs = nil, nil
+	targets := top.targets
+	top.targets = nil
 	warranted := top.created
 	top.created = false
 	top.mu.Unlock()
 
-	for idx, p := range procs {
-		if p.Process != nil {
-			_ = p.Process.Kill()
-			_, _ = p.Process.Wait()
+	for _, tg := range targets {
+		if tg.cmd.Process != nil {
+			_ = tg.cmd.Process.Kill()
+			_, _ = tg.cmd.Process.Wait()
 		}
-		f := logs[idx]
-		if _, err := f.Seek(0, io.SeekStart); err == nil {
-			if b, _ := io.ReadAll(f); len(b) > 0 {
-				top.t.Logf("target %s output:\n%s", f.Name(), b)
+		if _, err := tg.log.Seek(0, io.SeekStart); err == nil {
+			if b, _ := io.ReadAll(tg.log); len(b) > 0 {
+				top.t.Logf("target %s output:\n%s", tg.log.Name(), b)
 			}
 		}
-		_ = f.Close()
-		_ = os.Remove(f.Name())
+		_ = tg.log.Close()
+		_ = os.Remove(tg.log.Name())
 	}
 
 	if !warranted {
@@ -226,7 +245,7 @@ func (top *Topology) Close() {
 	for _, k := range []nsKey{keyClient, keyServer, keyInternet} {
 		_ = exec.Command("ip", "netns", "del", nsFull(k)).Run()
 	}
-	for _, v := range rootVeths {
+	for _, v := range rootVethEnds {
 		_ = exec.Command("ip", "link", "del", v).Run()
 	}
 }
@@ -308,15 +327,11 @@ func (top *Topology) StartEchoTargets() error {
 }
 
 // waitReady polls a probe-tcp re-exec inside ns until the address accepts a
-// connection.
+// connection, or returns an error on timeout.
 func (top *Topology) waitReady(ns, addr string, within time.Duration) error {
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
-		if err := nsExec(ns, os.Args[0], "-test.run=TestMainHelperNoop"); err == nil {
-			return nil
-		}
-		cmd := helperCmd(ns, "probe-tcp", addr)
-		if cmd.Run() == nil {
+		if helperCmd(ns, "probe-tcp", addr).Run() == nil {
 			return nil
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -348,8 +363,7 @@ func (top *Topology) spawn(ns, tag, mode, addr string) error {
 		return err
 	}
 	top.mu.Lock()
-	top.procs = append(top.procs, cmd)
-	top.logs = append(top.logs, logf)
+	top.targets = append(top.targets, target{cmd: cmd, log: logf})
 	top.mu.Unlock()
 	return nil
 }

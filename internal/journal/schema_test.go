@@ -44,7 +44,7 @@ func TestValidateRejections(t *testing.T) {
 		{"table zero", func(j *Journal) { j.Tables[0] = 0 }},
 		{"nft bad family", func(j *Journal) { j.NFTables[0].Family = "bridge" }},
 		{"nft bad name", func(j *Journal) { j.NFTables[0].Name = "bad name!" }},
-		{"sysctl bad key", func(j *Journal) { j.Sysctls[0].Name = "net/ipv4/ip_forward" }},
+		{"sysctl bad name", func(j *Journal) { j.Sysctls[0].Name = "net/ipv4/ip_forward" }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

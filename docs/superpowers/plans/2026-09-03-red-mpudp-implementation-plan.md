@@ -574,9 +574,11 @@ Create a deterministic, recoverable place to exercise privileged networking.
 Landed:
 
 - The full harness (`test/integration/`): per-run (`runID`) namespace names
-  shared with re-exec children; three namespaces; both veth paths + server
-  uplink; deterministic subnets; namespace-local routes in **both** directions
-  (internet-ns has return routes to each path subnet); `tc netem`
+  and run-scoped (`<=15`-byte) root-side veth names shared with re-exec
+  children, so concurrent runs never collide; three namespaces; both veth
+  paths + server uplink; deterministic subnets; namespace-local routes in
+  **both** directions (internet-ns has return routes to each path subnet);
+  `tc netem`
   delay/loss/duplication/reorder/rate helpers; link / address / gateway
   mutation; re-exec echo/DNS targets with readiness polling (no fixed sleep)
   and per-target output captured, dumped on failure, then removed; `Close`
@@ -590,16 +592,21 @@ Landed:
   atomic 0600 write (temp + fsync + rename + dir fsync); `Load` opened
   `O_NOFOLLOW` and required to be a single-hard-link regular file, mode 0600
   or tighter, owned by the caller or root, with no trailing data after the
-  JSON document; `EnsureDir` rejects a symlinked or wrong-owner directory;
-  `checkOwner`; and a **two-phase** `Recover` — phase 1 (routes, rules,
-  resolver, sysctls with restore-only-if-unchanged / preserve-and-report),
-  then a hard gate, then phase 2 (route-table flush, nftables kill switch
-  last). A phase-1 failure retains the kill switch fail-closed
-  (`Report.KillSwitchRetained`). `LinuxHost.DeleteRoute` matches on the
-  recorded metric. All covered by unit tests against a fake `Host`.
-  `red-mpudp cleanup --role client|server [--state-file] [--instance]`
-  independently asserts the expected role/instance against the journal before
-  any mutation, and refuses a missing / malformed / trailing-data /
+  JSON document — this file-integrity check is the independent guard that a
+  planted journal cannot direct recovery; `EnsureDir` rejects a symlinked or
+  wrong-owner directory; `checkOwner`; and a **phased** `Recover`:
+  phase 1 (routes, rules, resolver, sysctls with restore-only-if-unchanged /
+  preserve-and-report) → gate → phase 2a (owned route-table flush) → gate →
+  phase 2b (nftables kill switch, last). A failure in phase 1 **or** phase 2a
+  retains the kill switch fail-closed (`Report.KillSwitchRetained`); a
+  resolver manager that is not implemented yet (`ErrResolverUnsupported`) is a
+  reported gap (`Report.ResolverDeferred`), not a fail-closed error.
+  `LinuxHost.DeleteRoute` matches on the recorded metric. All covered by unit
+  tests against a fake `Host`.
+  `red-mpudp cleanup --state-file <path> [--role client|server] [--instance <id>]`
+  keeps the design §11.5 invocation (`--state-file` alone); `--role` /
+  `--instance` are optional operator-supplied pins checked against the journal
+  before any mutation. It refuses a missing / malformed / trailing-data /
   wrong-schema / role-mismatch / loose-permission journal (JOURNAL-21..23).
 - **JOURNAL-24** is implemented: `TestRecoverInNamespace` re-execs the test
   binary inside client-ns, installs an owned and an unrelated route in one
