@@ -250,16 +250,16 @@ Prove the riskiest assumptions before building Linux VPN plumbing around them.
 
 ### Crypto throughput spike
 
-- [ ] **SPIKE-29:** Create `internal/noisehandshake/transport_bench_test.go`.
-- [ ] **SPIKE-30:** Benchmark seal/open for 64-byte plaintext.
-- [ ] **SPIKE-31:** Benchmark seal/open for 256-byte plaintext.
-- [ ] **SPIKE-32:** Benchmark seal/open for 768-byte plaintext.
-- [ ] **SPIKE-33:** Benchmark seal/open for 1180-byte plaintext.
-- [ ] **SPIKE-34:** Benchmark one independently sealed path copy.
-- [ ] **SPIKE-35:** Benchmark two independently sealed path copies.
-- [ ] **SPIKE-36:** Benchmark four independently sealed path copies.
-- [ ] **SPIKE-37:** Record allocations per packet for every benchmark.
-- [ ] **SPIKE-38:** Save CPU model, Go version, sample count, and benchmark output
+- [x] **SPIKE-29:** Create `internal/noisehandshake/transport_bench_test.go`.
+- [x] **SPIKE-30:** Benchmark seal/open for 64-byte plaintext.
+- [x] **SPIKE-31:** Benchmark seal/open for 256-byte plaintext.
+- [x] **SPIKE-32:** Benchmark seal/open for 768-byte plaintext.
+- [x] **SPIKE-33:** Benchmark seal/open for 1180-byte plaintext.
+- [x] **SPIKE-34:** Benchmark one independently sealed path copy.
+- [x] **SPIKE-35:** Benchmark two independently sealed path copies.
+- [x] **SPIKE-36:** Benchmark four independently sealed path copies.
+- [x] **SPIKE-37:** Record allocations per packet for every benchmark.
+- [x] **SPIKE-38:** Save CPU model, Go version, sample count, and benchmark output
   under `test/results/phase0/`.
 
 ### Congestion-control spike

@@ -70,11 +70,15 @@ transport-nonce control (`SetNonce` per packet) without a private fork
 (`plan:SPIKE-05`, `plan:SPIKE-21`..`plan:SPIKE-28`). A failure here reopens
 D-P0-1.
 
-### D-P0-3 — Independent-copy crypto packet-rate target
-Whether sealing/opening 1, 2, and 4 independent path copies at representative
-sizes meets the packet-rate target on real hardware
-(`plan:SPIKE-29`..`plan:SPIKE-38`). Sets whether the 4-path cap is realistic in
-Go or needs batching / a lower cap.
+### D-P0-3 — Independent-copy crypto packet-rate target — RESOLVED (spike done)
+Target set: **≥ 160,000 AEAD ops/s single-core at 1180 B** (10k logical pps ×
+4 copies × 2 ends × 2 headroom, from design §17.4). Measured on the dev host
+(i7-14650HX, Go 1.27, flynn/noise v1.1.0): **~940k seal+open/s/core**, ~6×
+headroom, before spreading across cores/path-actors. `plan:SPIKE-29..38`
+complete; raw data + analysis in `test/results/phase0/`. The 4-path cap is
+realistic in Go. Formal sign-off folds into the transport decision record
+(D-P0-1). Allocation (1 obj/AEAD call in flynn/noise) is an M12 optimisation,
+not a blocker.
 
 ### D-P0-4 — Congestion controller fairness threshold
 Whether the per-direction AIMD controller lets a native TCP flow keep ≥ 35 %
