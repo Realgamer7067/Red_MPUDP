@@ -140,28 +140,36 @@ func NewTopology(t testing.TB) *Topology {
 		return nil // unreachable
 	}
 
-	// Create each veth pair with run-scoped root-side names, then move each end
-	// into its namespace and rename it to the stable namespace-local name.
 	steps := [][]string{
 		{"netns", "add", c},
 		{"netns", "add", s},
 		{"netns", "add", i},
-
 		{"link", "add", rv("a0"), "type", "veth", "peer", "name", rv("a1")},
-		{"link", "set", rv("a0"), "netns", c, "name", "pa0"},
-		{"link", "set", rv("a1"), "netns", s, "name", "pa1"},
-
 		{"link", "add", rv("b0"), "type", "veth", "peer", "name", rv("b1")},
-		{"link", "set", rv("b0"), "netns", c, "name", "pb0"},
-		{"link", "set", rv("b1"), "netns", s, "name", "pb1"},
-
 		{"link", "add", rv("u0"), "type", "veth", "peer", "name", rv("u1")},
-		{"link", "set", rv("u0"), "netns", s, "name", "up0"},
-		{"link", "set", rv("u1"), "netns", i, "name", "up1"},
 	}
 	for _, args := range steps {
 		if err := ipRoot(args...); err != nil {
 			return fail("topology setup (%v): %v", args, err)
+		}
+	}
+
+	// Move each end into its namespace, then rename it to the stable
+	// namespace-local name. The two steps are kept separate because the
+	// combined `ip link set ... netns ... name ...` form, while supported by
+	// current iproute2, is not worth depending on for a harness whose failures
+	// only surface under root.
+	moves := []struct{ scoped, ns, stable string }{
+		{rv("a0"), c, "pa0"}, {rv("a1"), s, "pa1"},
+		{rv("b0"), c, "pb0"}, {rv("b1"), s, "pb1"},
+		{rv("u0"), s, "up0"}, {rv("u1"), i, "up1"},
+	}
+	for _, m := range moves {
+		if err := ipRoot("link", "set", m.scoped, "netns", m.ns); err != nil {
+			return fail("move %s -> %s: %v", m.scoped, m.ns, err)
+		}
+		if err := ipIn(m.ns, "link", "set", m.scoped, "name", m.stable); err != nil {
+			return fail("rename %s -> %s in %s: %v", m.scoped, m.stable, m.ns, err)
 		}
 	}
 
