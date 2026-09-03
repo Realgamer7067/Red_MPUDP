@@ -1,0 +1,57 @@
+# RED_MPUDP Phase 0 crypto throughput (SPIKE-29..38)
+# date:     2026-09-03T07:16:49Z
+# cpu:      Intel(R) Core(TM) i7-14650HX  (nproc 24)
+# go:       go version go1.27.0-X:nodwarf5 linux/amd64
+# commit:   72a4aeebf9cd
+# suite:    Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s (github.com/flynn/noise v1.1.0)
+# command:  go test ./internal/noisehandshake/ -run '^$' -bench . -benchmem -benchtime=500ms -count=6
+# samples:  6 per benchmark
+
+goos: linux
+goarch: amd64
+pkg: github.com/Realgamer7067/Red_MPUDP/internal/noisehandshake
+cpu: Intel(R) Core(TM) i7-14650HX
+BenchmarkSealOpen64-24      	 1987117	       290.1 ns/op	 220.62 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen64-24      	 2084370	       275.4 ns/op	 232.35 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen64-24      	 2136320	       274.6 ns/op	 233.08 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen64-24      	 2256866	       278.2 ns/op	 230.06 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen64-24      	 2159073	       333.1 ns/op	 192.14 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen64-24      	 1912312	       299.0 ns/op	 214.06 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen256-24     	 1470843	       410.5 ns/op	 623.62 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen256-24     	 1552588	       391.5 ns/op	 653.84 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen256-24     	 1504489	       405.1 ns/op	 631.96 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen256-24     	 1497759	       399.9 ns/op	 640.10 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen256-24     	 1527854	       395.3 ns/op	 647.59 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen256-24     	 1475371	       408.5 ns/op	 626.68 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen768-24     	  790582	       748.3 ns/op	1026.31 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen768-24     	  708514	       760.4 ns/op	1010.00 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen768-24     	  778328	       759.7 ns/op	1010.92 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen768-24     	  792787	       745.2 ns/op	1030.55 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen768-24     	  778503	       745.0 ns/op	1030.90 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen768-24     	  734391	       761.4 ns/op	1008.71 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen1180-24    	  481311	      1073 ns/op	1099.72 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen1180-24    	  550677	      1076 ns/op	1096.73 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen1180-24    	  573908	      1060 ns/op	1113.68 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen1180-24    	  535773	      1025 ns/op	1150.83 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen1180-24    	  508831	      1006 ns/op	1173.49 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealOpen1180-24    	  562276	      1064 ns/op	1108.78 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealCopies1-24     	 1000000	       503.1 ns/op	2345.39 MB/s	      16 B/op	       1 allocs/op
+BenchmarkSealCopies1-24     	  970233	       521.1 ns/op	2264.45 MB/s	      16 B/op	       1 allocs/op
+BenchmarkSealCopies1-24     	 1000000	       508.9 ns/op	2318.70 MB/s	      16 B/op	       1 allocs/op
+BenchmarkSealCopies1-24     	 1000000	       501.3 ns/op	2354.06 MB/s	      16 B/op	       1 allocs/op
+BenchmarkSealCopies1-24     	 1000000	       501.0 ns/op	2355.42 MB/s	      16 B/op	       1 allocs/op
+BenchmarkSealCopies1-24     	 1190554	       525.8 ns/op	2244.35 MB/s	      16 B/op	       1 allocs/op
+BenchmarkSealCopies2-24     	  590978	      1001 ns/op	1178.72 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealCopies2-24     	  612217	      1004 ns/op	1175.23 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealCopies2-24     	  567640	      1014 ns/op	1163.75 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealCopies2-24     	  599692	      1027 ns/op	1148.53 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealCopies2-24     	  499851	      1012 ns/op	1165.87 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealCopies2-24     	  544802	      1008 ns/op	1171.12 MB/s	      32 B/op	       2 allocs/op
+BenchmarkSealCopies4-24     	  256322	      1999 ns/op	 590.17 MB/s	      64 B/op	       4 allocs/op
+BenchmarkSealCopies4-24     	  299780	      2013 ns/op	 586.26 MB/s	      64 B/op	       4 allocs/op
+BenchmarkSealCopies4-24     	  299254	      1992 ns/op	 592.34 MB/s	      64 B/op	       4 allocs/op
+BenchmarkSealCopies4-24     	  272914	      2048 ns/op	 576.04 MB/s	      64 B/op	       4 allocs/op
+BenchmarkSealCopies4-24     	  301730	      2021 ns/op	 583.94 MB/s	      64 B/op	       4 allocs/op
+BenchmarkSealCopies4-24     	  301322	      2083 ns/op	 566.41 MB/s	      64 B/op	       4 allocs/op
+PASS
+ok  	github.com/Realgamer7067/Red_MPUDP/internal/noisehandshake	31.161s

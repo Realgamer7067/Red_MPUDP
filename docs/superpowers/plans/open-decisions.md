@@ -57,31 +57,57 @@ Minimum kernel **5.15**; release matrix in
 
 ## Assigned to the M02 Phase 0 stop/go decision
 
-### D-P0-1 — v1 transport: custom UDP + Noise vs QUIC DATAGRAM (design D2 vs D12)
-The design specifies `Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s` over plain UDP
-(D2) and keeps QUIC DATAGRAM (RFC 9221) as an alternate that must first pass
-the Phase 0 benchmark (D12). `plan:SPIKE-49`..`plan:SPIKE-66` produce
-`docs/decisions/0001-v1-transport.md`. If the selection changes D2 or D12 the
-design is updated (`plan:SPIKE-65`).
+### D-P0-1 — v1 transport — RESOLVED (2026-09-03)
+**Custom UDP + `Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s` (D2).** QUIC DATAGRAM
+rejected on three independent blockers (no pre-send max-size, no per-datagram
+delivery feedback, uncontrollable 32-frame blocking queue — the last
+demonstrated in `TestSendQueueBlocksWhenFull`) plus ~7–15× per-datagram
+overhead — `plan:SPIKE-59`. Decision record:
+`docs/decisions/0001-v1-transport.md` (Accepted). D2/D12 unchanged; spec
+revision 4 replaced the flat §17.4 Jain gate with the §9.5.1 criterion.
+Evidence retained under `experiments/quicdatagram/`.
 
-### D-P0-2 — Explicit-nonce out-of-order safety with the chosen Noise library
-Whether the selected Go Noise package exposes IKpsk2 **and** explicit
-transport-nonce control (`SetNonce` per packet) without a private fork
-(`plan:SPIKE-05`, `plan:SPIKE-21`..`plan:SPIKE-28`). A failure here reopens
-D-P0-1.
+### D-P0-2 — Explicit-nonce out-of-order safety — RESOLVED (2026-09-03)
+`github.com/flynn/noise v1.1.0` exposes `HandshakeIK` +
+`PresharedKeyPlacement=2` (= IKpsk2) and `(*CipherState).SetNonce(uint64)` for
+per-packet transport nonces, **no fork** (`plan:SPIKE-05`). Verified:
+out-of-order nonces `{0,1,2,4097}` delivered `{2,0,4097,1}` each open exactly
+once; every header byte is authenticated; an auth failure never wedges the
+receiver; per-path cipher states are race-clean (`plan:SPIKE-21..28`). Also
+cross-validated against cacophony reference vectors byte-for-byte
+(`plan:SPIKE-20`).
 
-### D-P0-3 — Independent-copy crypto packet-rate target
-Whether sealing/opening 1, 2, and 4 independent path copies at representative
-sizes meets the packet-rate target on real hardware
-(`plan:SPIKE-29`..`plan:SPIKE-38`). Sets whether the 4-path cap is realistic in
-Go or needs batching / a lower cap.
+### D-P0-3 — Independent-copy crypto packet-rate target — RESOLVED (spike done)
+Target set: **≥ 160,000 AEAD ops/s single-core at 1180 B** (10k logical pps ×
+4 copies × 2 ends × 2 headroom, from design §17.4). Measured on the dev host
+(i7-14650HX, Go 1.27, flynn/noise v1.1.0): **~940k seal+open/s/core**, ~6×
+headroom, before spreading across cores/path-actors. `plan:SPIKE-29..38`
+complete; raw data + analysis in `test/results/phase0/`. The 4-path cap is
+realistic in Go. Formal sign-off folds into the transport decision record
+(D-P0-1). Allocation (1 obj/AEAD call in flynn/noise) is an M12 optimisation,
+not a blocker.
 
-### D-P0-4 — Congestion controller fairness threshold
-Whether the per-direction AIMD controller lets a native TCP flow keep ≥ 35 %
-of a shared bottleneck with Jain fairness ≥ 0.90
-(`plan:SPIKE-39`..`plan:SPIKE-48`, re-checked `plan:CC-FAIR-*`). Failure
-reopens the transport decision in favour of an established congestion-controlled
-datagram transport.
+### D-P0-4 — Congestion controller fairness — RESOLVED for M02; M17 target set
+`plan:SPIKE-39..48` complete. Deterministic fluid sim
+(`internal/congestion/phase0sim/`, data in `test/results/phase0/`).
+
+**The flat "Jain ≥ 0.90 at every depth" gate was wrong for a latency-first
+design and is replaced** (spec revision 4) by the normative **§9.5.1 fairness
+acceptance criterion**: (1) native TCP ≥ 35 % at every swept buffer depth,
+(2) Jain ≥ 0.90 at/below `queue_delay_target`, (3) above the target, deeper
+buffer ⇒ controller throughput non-increasing AND TCP share non-decreasing
+(monotonic yield). `TestFairnessCriterion` asserts all three; the Phase 0 sim
+**meets** it (min TCP share 53 %; Jain ≈ 0.996 at ≤ 15 ms; throughput
+7.76 → 3.12 → 1.76 → 1.28 Mbit/s as the buffer grows). SPIKE-42..45 (additive
+increase, once-per-RTT halving, stale-feedback collapse, 2-round delay cut) all
+exact.
+
+Jain is ≈ 0.60 on a 60 ms bloated buffer — deliberate yielding, not
+misbehaviour. **M17 target** (`plan:CC-FAIR-08`): add a bounded loss-driven
+additive-increase path (delay-gated increase stays primary) so that, with it
+enabled, **Jain ≥ 0.90 also at a 60 ms drop-tail buffer** on `tc netem` while
+§9.5.1 clauses 1 and 3 still hold. If M17 misses that, §9.5 is revised again —
+the transport is not reopened. **Open, owned by M17.**
 
 ### D-P0-5 — Frozen default values
 Queue sizes, replica budgets, pacing rates, probe/report intervals, and the

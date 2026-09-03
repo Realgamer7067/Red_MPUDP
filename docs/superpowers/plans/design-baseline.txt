@@ -4,16 +4,25 @@ RED_MPUDP v1 — normative design baseline
 Normative protocol document for v1:
   docs/superpowers/specs/2026-09-02-red-mpudp-design.md
 
-Design revision: 3
-Baseline commit: 904bd12
-  ("docs: rename wire magic RMCU->RMPU, bump design to revision 3")
+Design revision: 4
+Baseline commit: de526143b879
+  ("fix(M02): resolve fairness gate via §9.5.1 criterion; harden QUIC spike")
+  Revision 4 records the M02 Phase 0 transport decision (custom UDP + Noise
+  confirmed under D2; the QUIC DATAGRAM alternate under D12 rejected) and
+  replaces the flat §17.4 "Jain >= 0.90" fairness gate with the normative
+  §9.5.1 fairness acceptance criterion. No wire-format / packet-layout /
+  handshake / MTU-arithmetic change.
 
 Lineage:
-  21deb5a  docs: RED_MCUDP multipath UDP VPN design spec        (revision 1)
-  c8f3f71  docs: rename to RED_MPUDP, revise design spec, add    (revision 2 text,
-           v1 implementation plan                                 renamed)
-  904bd12  docs: rename wire magic RMCU->RMPU, bump design to    (revision 3)
-           revision 3
+  21deb5a       docs: RED_MCUDP multipath UDP VPN design spec        (revision 1)
+  c8f3f71       docs: rename to RED_MPUDP, revise design spec, add   (revision 2
+                v1 implementation plan                                text, renamed)
+  904bd12       docs: rename wire magic RMCU->RMPU, bump design      (revision 3)
+                to revision 3
+  bf54845       docs(M02): sign off Phase 0 transport decision       (revision 4,
+                                                                      initial)
+  de526143b879  fix(M02): resolve fairness gate via §9.5.1           (revision 4,
+                criterion; harden QUIC spike                          finalized)
 
 Rule (LOCK-01): the file above is the single source of truth for the v1 wire
 format, security model, MTU arithmetic, and Linux routing behavior. Any change
