@@ -92,42 +92,42 @@ Remove implementation ambiguity before creating Go packages.
 
 ### Steps
 
-- [ ] **LOCK-01:** Confirm the source design file is the normative protocol
+- [x] **LOCK-01:** Confirm the source design file is the normative protocol
   document for v1.
-- [ ] **LOCK-02:** Record the Git commit containing the design revision in
+- [x] **LOCK-02:** Record the Git commit containing the design revision in
   `docs/superpowers/plans/design-baseline.txt`.
-- [ ] **LOCK-03:** Confirm whether the canonical module path will be
+- [x] **LOCK-03:** Confirm whether the canonical module path will be
   `github.com/Realgamer7067/Red_MPUDP`.
-- [ ] **LOCK-04:** Record the selected Go version in
+- [x] **LOCK-04:** Record the selected Go version in
   `docs/development/toolchain.md`.
-- [ ] **LOCK-05:** Record the minimum supported Linux kernel after checking the
+- [x] **LOCK-05:** Record the minimum supported Linux kernel after checking the
   required TUN, nftables, policy-rule, socket-mark, and error-queue features.
-- [ ] **LOCK-06:** Copy every v1 success criterion into
+- [x] **LOCK-06:** Copy every v1 success criterion into
   `docs/superpowers/plans/v1-traceability.md` as an unchecked requirement.
-- [ ] **LOCK-07:** Give every success criterion a stable identifier from
+- [x] **LOCK-07:** Give every success criterion a stable identifier from
   `REQ-001` upward.
-- [ ] **LOCK-08:** Map each requirement to the milestone that implements it.
-- [ ] **LOCK-09:** Map each requirement to the test that will eventually prove
+- [x] **LOCK-08:** Map each requirement to the milestone that implements it.
+- [x] **LOCK-09:** Map each requirement to the test that will eventually prove
   it.
-- [ ] **LOCK-10:** Record unresolved design questions in
+- [x] **LOCK-10:** Record unresolved design questions in
   `docs/superpowers/plans/open-decisions.md`.
-- [ ] **LOCK-11:** Resolve whether production configuration starts at TUN MTU
+- [x] **LOCK-11:** Resolve whether production configuration starts at TUN MTU
   1180 or probes toward a preferred MTU before committing the session value.
-- [ ] **LOCK-12:** If the MTU decision differs from the source design, update
+- [x] **LOCK-12:** If the MTU decision differs from the source design, update
   the design before implementing PMTU.
-- [ ] **LOCK-13:** Resolve the exact minimum kernel and distribution matrix for
+- [x] **LOCK-13:** Resolve the exact minimum kernel and distribution matrix for
   release testing.
-- [ ] **LOCK-14:** Resolve the canonical config locations for client and server.
-- [ ] **LOCK-15:** Resolve whether a single binary with subcommands remains the
+- [x] **LOCK-14:** Resolve the canonical config locations for client and server.
+- [x] **LOCK-15:** Resolve whether a single binary with subcommands remains the
   release shape.
-- [ ] **LOCK-16:** Confirm that IPv6 tunnelling, multi-server operation, traffic
+- [x] **LOCK-16:** Confirm that IPv6 tunnelling, multi-server operation, traffic
   obfuscation, and throughput bonding remain outside v1.
-- [ ] **LOCK-17:** Add a rule to the pull-request template requiring traceability
+- [x] **LOCK-17:** Add a rule to the pull-request template requiring traceability
   updates for protocol changes.
 
 ### Gate
 
-- [ ] Every design question that changes the wire format, security model, MTU
+- [x] Every design question that changes the wire format, security model, MTU
   arithmetic, or Linux routing behavior is resolved or explicitly assigned to
   the Phase 0 stop/go decision.
 
@@ -145,48 +145,48 @@ Create a minimal, reproducible Go project without implementing VPN behavior.
 
 ### Steps
 
-- [ ] **BOOT-01:** Add `.gitignore` entries for Go binaries, coverage files,
+- [x] **BOOT-01:** Add `.gitignore` entries for Go binaries, coverage files,
   fuzz corpora generated at runtime, profiles, benchmark output, and local key
   material.
-- [ ] **BOOT-02:** Add `.editorconfig` with UTF-8, LF, final newline, and Go tab
+- [x] **BOOT-02:** Add `.editorconfig` with UTF-8, LF, final newline, and Go tab
   rules.
-- [ ] **BOOT-03:** Verify the chosen Go toolchain is installed.
-- [ ] **BOOT-04:** Run `go mod init github.com/Realgamer7067/Red_MPUDP`.
-- [ ] **BOOT-05:** Create `cmd/red-mpudp/main.go` with a process entry point that
+- [x] **BOOT-03:** Verify the chosen Go toolchain is installed.
+- [x] **BOOT-04:** Run `go mod init github.com/Realgamer7067/Red_MPUDP`.
+- [x] **BOOT-05:** Create `cmd/red-mpudp/main.go` with a process entry point that
   returns a nonzero code for an unknown subcommand.
-- [ ] **BOOT-06:** Create `internal/buildinfo/buildinfo.go` for version, commit,
+- [x] **BOOT-06:** Create `internal/buildinfo/buildinfo.go` for version, commit,
   and build-date values.
-- [ ] **BOOT-07:** Add a `version` subcommand.
-- [ ] **BOOT-08:** Add a unit test for deterministic `version` output when build
+- [x] **BOOT-07:** Add a `version` subcommand.
+- [x] **BOOT-08:** Add a unit test for deterministic `version` output when build
   metadata is injected.
-- [ ] **BOOT-09:** Create `Makefile` target `fmt`.
-- [ ] **BOOT-10:** Create `Makefile` target `vet`.
-- [ ] **BOOT-11:** Create `Makefile` target `test-unit`.
-- [ ] **BOOT-12:** Create `Makefile` target `test-race`.
-- [ ] **BOOT-13:** Create `Makefile` target `test-integration` with an explicit
+- [x] **BOOT-09:** Create `Makefile` target `fmt`.
+- [x] **BOOT-10:** Create `Makefile` target `vet`.
+- [x] **BOOT-11:** Create `Makefile` target `test-unit`.
+- [x] **BOOT-12:** Create `Makefile` target `test-race`.
+- [x] **BOOT-13:** Create `Makefile` target `test-integration` with an explicit
   Linux/root preflight.
-- [ ] **BOOT-14:** Create `Makefile` target `test-fuzz-smoke` with bounded fuzz
+- [x] **BOOT-14:** Create `Makefile` target `test-fuzz-smoke` with bounded fuzz
   duration.
-- [ ] **BOOT-15:** Create `Makefile` target `bench`.
-- [ ] **BOOT-16:** Create `Makefile` target `build` with reproducible version
+- [x] **BOOT-15:** Create `Makefile` target `bench`.
+- [x] **BOOT-16:** Create `Makefile` target `build` with reproducible version
   flags.
-- [ ] **BOOT-17:** Add `go vet` and unit-test CI jobs.
-- [ ] **BOOT-18:** Add a race-test CI job.
-- [ ] **BOOT-19:** Add a build-artifact CI job for Linux amd64.
-- [ ] **BOOT-20:** Add a separate privileged integration workflow that cannot
+- [x] **BOOT-17:** Add `go vet` and unit-test CI jobs.
+- [x] **BOOT-18:** Add a race-test CI job.
+- [x] **BOOT-19:** Add a build-artifact CI job for Linux amd64.
+- [x] **BOOT-20:** Add a separate privileged integration workflow that cannot
   run on untrusted pull-request code with repository secrets.
-- [ ] **BOOT-21:** Add dependency-cache keys containing the Go version and
+- [x] **BOOT-21:** Add dependency-cache keys containing the Go version and
   `go.sum` hash.
-- [ ] **BOOT-22:** Add `CONTRIBUTING.md` with the test commands and privilege
+- [x] **BOOT-22:** Add `CONTRIBUTING.md` with the test commands and privilege
   boundaries.
-- [ ] **BOOT-23:** Add `SECURITY.md` with a private vulnerability-reporting
+- [x] **BOOT-23:** Add `SECURITY.md` with a private vulnerability-reporting
   process and a warning not to attach keys or plaintext packet captures.
-- [ ] **BOOT-24:** Run `go mod tidy`.
-- [ ] **BOOT-25:** Run every non-privileged Make target.
+- [x] **BOOT-24:** Run `go mod tidy`.
+- [x] **BOOT-25:** Run every non-privileged Make target.
 
 ### Gate
 
-- [ ] A fresh checkout builds and passes unit/race checks using only documented
+- [x] A fresh checkout builds and passes unit/race checks using only documented
   commands.
 
 ### Checkpoint
@@ -864,7 +864,7 @@ logic depends on them.
 ### Constants and errors
 
 - [ ] **WIRE-01:** Create `internal/wire/constants.go`.
-- [ ] **WIRE-02:** Define magic bytes `RMCU`.
+- [ ] **WIRE-02:** Define magic bytes `RMPU`.
 - [ ] **WIRE-03:** Define handshake version byte `0x01`.
 - [ ] **WIRE-04:** Define transport version nibble `1`.
 - [ ] **WIRE-05:** Define handshake type values INIT 1, RESPONSE 2, RETRY 3.
