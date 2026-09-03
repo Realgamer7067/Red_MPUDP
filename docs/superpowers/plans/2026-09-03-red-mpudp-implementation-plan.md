@@ -339,47 +339,47 @@ unbounded memory.
 
 ### Clock
 
-- [ ] **BASE-01:** Create `internal/clock/clock.go` with `Now`, timer, and ticker
+- [x] **BASE-01:** Create `internal/clock/clock.go` with `Now`, timer, and ticker
   abstractions backed by monotonic time.
-- [ ] **BASE-02:** Create `internal/testclock/clock.go`.
-- [ ] **BASE-03:** Add deterministic timer advancement.
-- [ ] **BASE-04:** Add deterministic ticker advancement.
-- [ ] **BASE-05:** Define ordering for timers firing at the same instant.
-- [ ] **BASE-06:** Test timer cancellation.
-- [ ] **BASE-07:** Test ticker stop.
-- [ ] **BASE-08:** Test that callbacks cannot run while the fake clock lock is
+- [x] **BASE-02:** Create `internal/testclock/clock.go`.
+- [x] **BASE-03:** Add deterministic timer advancement.
+- [x] **BASE-04:** Add deterministic ticker advancement.
+- [x] **BASE-05:** Define ordering for timers firing at the same instant.
+- [x] **BASE-06:** Test timer cancellation.
+- [x] **BASE-07:** Test ticker stop.
+- [x] **BASE-08:** Test that callbacks cannot run while the fake clock lock is
   held.
 
 ### Bounded data structures
 
-- [ ] **BASE-09:** Create a generic fixed-capacity ring under
+- [x] **BASE-09:** Create a generic fixed-capacity ring under
   `internal/bounded/`.
-- [ ] **BASE-10:** Test empty-ring behavior.
-- [ ] **BASE-11:** Test full-ring behavior.
-- [ ] **BASE-12:** Test wraparound behavior.
-- [ ] **BASE-13:** Add a bounded byte-counted queue primitive.
-- [ ] **BASE-14:** Reject an item larger than the byte limit.
-- [ ] **BASE-15:** Reject an item when the packet limit is reached.
-- [ ] **BASE-16:** Track queue insertion monotonic time.
-- [ ] **BASE-17:** Test exact byte accounting on enqueue/dequeue/drop.
+- [x] **BASE-10:** Test empty-ring behavior.
+- [x] **BASE-11:** Test full-ring behavior.
+- [x] **BASE-12:** Test wraparound behavior.
+- [x] **BASE-13:** Add a bounded byte-counted queue primitive.
+- [x] **BASE-14:** Reject an item larger than the byte limit.
+- [x] **BASE-15:** Reject an item when the packet limit is reached.
+- [x] **BASE-16:** Track queue insertion monotonic time.
+- [x] **BASE-17:** Test exact byte accounting on enqueue/dequeue/drop.
 
 ### Buffers and errors
 
-- [ ] **BASE-18:** Create `internal/packetbuf/pool.go` with fixed size classes
+- [x] **BASE-18:** Create `internal/packetbuf/pool.go` with fixed size classes
   sufficient for the maximum v1 datagram.
-- [ ] **BASE-19:** Define one-owner transfer semantics in package documentation.
-- [ ] **BASE-20:** Add debug-only double-release detection.
-- [ ] **BASE-21:** Test release on every modeled error path.
-- [ ] **BASE-22:** Create stable bounded reason-code enums for drops, handshake
+- [x] **BASE-19:** Define one-owner transfer semantics in package documentation.
+- [x] **BASE-20:** Add debug-only double-release detection.
+- [x] **BASE-21:** Test release on every modeled error path.
+- [x] **BASE-22:** Create stable bounded reason-code enums for drops, handshake
   failures, closes, and health transitions.
-- [ ] **BASE-23:** Test that reason codes have stable string forms.
-- [ ] **BASE-24:** Prohibit attacker-controlled text from becoming a reason-code
+- [x] **BASE-23:** Test that reason codes have stable string forms.
+- [x] **BASE-24:** Prohibit attacker-controlled text from becoming a reason-code
   value.
 
 ### Gate
 
-- [ ] `go test -race` passes for all foundation packages.
-- [ ] Queue and ring tests use no wall-clock sleeps.
+- [x] `go test -race` passes for all foundation packages.
+- [x] Queue and ring tests use no wall-clock sleeps.
 
 ### Checkpoint
 
