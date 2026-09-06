@@ -41,6 +41,10 @@ func runHelper(mode, addr string) {
 		os.Exit(journalRecoverInNamespace())
 	case "tun-plaintext":
 		os.Exit(tunPlaintextCheck())
+	case "udp-path":
+		os.Exit(udpPathCheck(addr))
+	case "udp-sink":
+		os.Exit(udpSinkCheck(addr))
 	default:
 		os.Exit(2)
 	}

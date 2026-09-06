@@ -834,60 +834,60 @@ socket.
 
 ### Transport API
 
-- [ ] **UDP-01:** Create `internal/transport/datagram.go` with `Endpoint`,
+- [x] **UDP-01:** Create `internal/transport/datagram.go` with `Endpoint`,
   `ReceiveMeta`, `PathError`, and `DatagramIO`.
-- [ ] **UDP-02:** Document buffer ownership for every interface method.
-- [ ] **UDP-03:** Define stable errors for closed, truncated, unsupported, and
+- [x] **UDP-02:** Document buffer ownership for every interface method.
+- [x] **UDP-03:** Define stable errors for closed, truncated, unsupported, and
   oversized operations.
-- [ ] **UDP-04:** Create an in-memory DatagramIO pair for unit tests.
-- [ ] **UDP-05:** Add reorder injection to the in-memory transport.
-- [ ] **UDP-06:** Add loss injection to the in-memory transport.
-- [ ] **UDP-07:** Add duplication injection to the in-memory transport.
-- [ ] **UDP-08:** Add bounded receive capacity to the in-memory transport.
+- [x] **UDP-04:** Create an in-memory DatagramIO pair for unit tests.
+- [x] **UDP-05:** Add reorder injection to the in-memory transport.
+- [x] **UDP-06:** Add loss injection to the in-memory transport.
+- [x] **UDP-07:** Add duplication injection to the in-memory transport.
+- [x] **UDP-08:** Add bounded receive capacity to the in-memory transport.
 
 ### Client socket
 
-- [ ] **UDP-09:** Create `internal/transport/udp/client_linux.go`.
-- [ ] **UDP-10:** Resolve the configured interface to a stable ifindex.
-- [ ] **UDP-11:** Reject an interface that disappears before socket setup.
-- [ ] **UDP-12:** Create an IPv4 UDP socket with close-on-exec and nonblocking
+- [x] **UDP-09:** Create `internal/transport/udp/client_linux.go`.
+- [x] **UDP-10:** Resolve the configured interface to a stable ifindex.
+- [x] **UDP-11:** Reject an interface that disappears before socket setup.
+- [x] **UDP-12:** Create an IPv4 UDP socket with close-on-exec and nonblocking
   flags.
-- [ ] **UDP-13:** Apply `SO_BINDTODEVICE`.
-- [ ] **UDP-14:** Apply the configured `SO_MARK`.
-- [ ] **UDP-15:** Bind the selected local IPv4 source address.
-- [ ] **UDP-16:** Connect the socket to the literal server endpoint.
-- [ ] **UDP-17:** Set `IP_MTU_DISCOVER` to do-not-fragment behavior.
-- [ ] **UDP-18:** Enable extended error reception.
-- [ ] **UDP-19:** Set requested receive buffer size.
-- [ ] **UDP-20:** Set requested send buffer size.
-- [ ] **UDP-21:** Read back effective buffer sizes and expose them in a bounded
+- [x] **UDP-13:** Apply `SO_BINDTODEVICE`.
+- [x] **UDP-14:** Apply the configured `SO_MARK`.
+- [x] **UDP-15:** Bind the selected local IPv4 source address.
+- [x] **UDP-16:** Connect the socket to the literal server endpoint.
+- [x] **UDP-17:** Set `IP_MTU_DISCOVER` to do-not-fragment behavior.
+- [x] **UDP-18:** Enable extended error reception.
+- [x] **UDP-19:** Set requested receive buffer size.
+- [x] **UDP-20:** Set requested send buffer size.
+- [x] **UDP-21:** Read back effective buffer sizes and expose them in a bounded
   diagnostic structure.
 
 ### Server socket
 
-- [ ] **UDP-22:** Create `internal/transport/udp/server_linux.go`.
-- [ ] **UDP-23:** Bind one IPv4 UDP socket to the configured listen address.
-- [ ] **UDP-24:** Enable packet-info ancillary data.
-- [ ] **UDP-25:** Enable extended error reception.
-- [ ] **UDP-26:** Set do-not-fragment behavior.
-- [ ] **UDP-27:** Record local destination address and receive ifindex.
-- [ ] **UDP-28:** Send a datagram to a caller-selected remote endpoint.
+- [x] **UDP-22:** Create `internal/transport/udp/server_linux.go`.
+- [x] **UDP-23:** Bind one IPv4 UDP socket to the configured listen address.
+- [x] **UDP-24:** Enable packet-info ancillary data.
+- [x] **UDP-25:** Enable extended error reception.
+- [x] **UDP-26:** Set do-not-fragment behavior.
+- [x] **UDP-27:** Record local destination address and receive ifindex.
+- [x] **UDP-28:** Send a datagram to a caller-selected remote endpoint.
 
 ### Receive and error paths
 
-- [ ] **UDP-29:** Implement receive using `recvmsg` semantics.
-- [ ] **UDP-30:** Populate source address from the message header.
-- [ ] **UDP-31:** Populate local address and ifindex from ancillary data.
-- [ ] **UDP-32:** Surface `MSG_TRUNC` as `ReceiveMeta.Truncated`.
-- [ ] **UDP-33:** Drop truncated datagrams before wire parsing.
-- [ ] **UDP-34:** Read asynchronous error-queue messages.
-- [ ] **UDP-35:** Extract the reported MTU when present.
-- [ ] **UDP-36:** Extract the quoted peer tuple when present.
-- [ ] **UDP-37:** Ignore an error that cannot be mapped to a known socket/path.
-- [ ] **UDP-38:** Surface synchronous `EMSGSIZE` without retrying an oversized
+- [x] **UDP-29:** Implement receive using `recvmsg` semantics.
+- [x] **UDP-30:** Populate source address from the message header.
+- [x] **UDP-31:** Populate local address and ifindex from ancillary data.
+- [x] **UDP-32:** Surface `MSG_TRUNC` as `ReceiveMeta.Truncated`.
+- [x] **UDP-33:** Drop truncated datagrams before wire parsing.
+- [x] **UDP-34:** Read asynchronous error-queue messages.
+- [x] **UDP-35:** Extract the reported MTU when present.
+- [x] **UDP-36:** Extract the quoted peer tuple when present.
+- [x] **UDP-37:** Ignore an error that cannot be mapped to a known socket/path.
+- [x] **UDP-38:** Surface synchronous `EMSGSIZE` without retrying an oversized
   datagram.
-- [ ] **UDP-39:** Make close unblock read and error-queue goroutines.
-- [ ] **UDP-40:** Make repeated close calls safe.
+- [x] **UDP-39:** Make close unblock read and error-queue goroutines.
+- [x] **UDP-40:** Make repeated close calls safe.
 
 ### Integration and benchmarks
 
@@ -897,15 +897,129 @@ socket.
 - [ ] **UDP-44:** Assert path-B packets leave only the path-B interface.
 - [ ] **UDP-45:** Inject an oversized datagram and assert truncation detection.
 - [ ] **UDP-46:** Lower a path MTU and assert `EMSGSIZE` or error-queue feedback.
-- [ ] **UDP-47:** Benchmark receive allocations.
-- [ ] **UDP-48:** Benchmark send allocations.
-- [ ] **UDP-49:** Record baseline packets per second for one socket.
+- [x] **UDP-47:** Benchmark receive allocations.
+- [x] **UDP-48:** Benchmark send allocations.
+- [x] **UDP-49:** Record baseline packets per second for one socket.
 
 ### Gate
 
 - [ ] Interface binding and marking are proven independently for both paths.
-- [ ] Oversized/truncated packets cannot be mistaken for valid packets.
-- [ ] Closing transport leaves no goroutine blocked.
+  *(blocked: privileged run — `TestUDPPathsBindToTheirOwnInterface` captures on
+  both client uplinks at once while one path sends, asserting the datagram
+  appears on its own interface and on no other. `SO_MARK` needs CAP_NET_ADMIN
+  and is refused unprivileged; `TestDialFWMarkIsAllOrNothing` proves only the
+  all-or-nothing decision here, never that a mark took effect.)*
+- [x] Oversized/truncated packets cannot be mistaken for valid packets.
+  *(unprivileged, on real loopback sockets:
+  `TestTruncatedDatagramIsDroppedNotTruncated` asserts a datagram larger than
+  the receive buffer yields n=0, `meta.Truncated`, an untouched caller buffer,
+  and a still-usable socket; `TestOversizeWriteRefused` asserts an oversized
+  send is `ErrOversize` and is never retried at a smaller size. The in-memory
+  transport is covered by `TestMemoryTruncationDropsDatagram`. The same property
+  over a two-namespace path is `TestUDPOversizeAndTruncation`, which stays
+  privileged.)*
+- [x] Closing transport leaves no goroutine blocked.
+  *(unprivileged: `TestCloseUnblocksEveryoneAndLeaksNoGoroutine` parks a reader
+  and a path-error reader, closes, requires both to return, calls Close twice,
+  and waits for the goroutine count to settle — which is what proves the
+  error-queue goroutine exited too. `TestMemoryCloseUnblocksAndIsIdempotent`
+  covers the in-memory transport.)*
+
+### Status (2026-09-06)
+
+Landed:
+
+- `internal/transport`: `Endpoint`, `ReceiveMeta`, `PathError` and `DatagramIO`
+  exactly as design §13 specifies, with stable errors (`ErrClosed`,
+  `ErrTruncated`, `ErrUnsupported`, `ErrOversize`) and per-method buffer
+  ownership documented on the interface (UDP-01..03). No implementation retains
+  a caller's slice, which `TestMemoryWriteDoesNotRetainCallerBuffer` asserts by
+  overwriting the buffer the instant `WriteTo` returns.
+- `internal/transport/memory.go`: an in-memory `DatagramIO` pair with
+  seeded-deterministic reorder, loss and duplication injection and a bounded
+  receive queue that drops and counts at capacity (UDP-04..08).
+- `internal/transport/udp`: the Linux sockets. `Dial` resolves the interface to
+  an ifindex first and refuses one that is absent (UDP-10, UDP-11), creates the
+  socket `SOCK_CLOEXEC|SOCK_NONBLOCK` in one call so no window exists for a fork
+  to inherit it (UDP-12), applies `SO_BINDTODEVICE` and `SO_MARK`, binds the
+  source address, connects to the literal server, sets `IP_PMTUDISC_DO` and
+  `IP_RECVERR`, sizes the buffers and reads back what the kernel granted
+  (UDP-13..21). `Listen` binds the shared server socket with `IP_PKTINFO`,
+  `IP_RECVERR` and `IP_PMTUDISC_DO` (UDP-22..26) and recovers the local
+  destination address and receive ifindex per datagram (UDP-27), since one
+  socket serves every path.
+- Receive uses `recvmsg` with `MSG_TRUNC` in the flags, so the kernel reports
+  the datagram's true length even when it did not fit. That length and the
+  returned `MSG_TRUNC` bit both mean truncation: the datagram is dropped whole,
+  `n` is 0, and the caller's buffer is left untouched, so nothing truncated can
+  reach a parser (UDP-29..33).
+- A configured `SO_MARK` the kernel refuses is fatal rather than tolerated. A
+  socket that silently lost its mark would egress through the wrong routing
+  table and could recurse through `red0` (design §11.1), so `Dial` fails instead
+  of returning it.
+- `SO_RCVBUF`/`SO_SNDBUF` requested and effective values are recorded side by
+  side in a fixed `Diagnostics`/`BufferSizes` struct with no per-packet or
+  per-peer labels. Linux stores roughly twice the request and clamps to
+  `net.core.{r,w}mem_max`, so nothing asserts equality — measured here,
+  262144 requested became 524288 effective.
+
+Error-queue handling (UDP-34..37), and the one design decision worth recording:
+
+- The error queue is read by a dedicated goroutine polling a **duplicated**
+  descriptor for `POLLERR` only, deliberately outside Go's netpoll. The first
+  implementation ran `RawConn.Read` on the shared `*os.File`, which deadlocked
+  the receive path: Go's poller takes a per-descriptor read lock, so the
+  error-queue goroutine starved every ordinary read. Polling a dup for `POLLERR`
+  alone also means inbound data never wakes that goroutine, so it does not spin.
+- Every `PathError` — whether the error-queue goroutine parsed it or the
+  synchronous send path hit the errno — is published into one bounded channel
+  that `ReadPathError` drains. That single owner is what makes the outcome
+  independent of which goroutine the kernel happened to wake first, and it is
+  why `ReadPathError` cannot hang when the other one won the race
+  (`TestPathErrorReachesReaderRegardlessOfRace`, which runs a competing reader
+  and is unprivileged).
+- Only kernel binary structures are parsed — `sock_extended_err` and the
+  offender sockaddr the kernel appends — never any attacker-controlled string.
+  A next-hop MTU is read only for ICMP fragmentation-needed or a local
+  `EMSGSIZE`, where the kernel actually puts one; any other origin is ignored
+  rather than guessed at (UDP-35..37).
+- A synchronous `EMSGSIZE` surfaces as `ErrOversize` and the datagram is never
+  retried smaller — only authenticated probe results move the PMTU
+  (design §10, UDP-38).
+- `Close` is `sync.Once`: it wakes the error-queue poller through a pipe, waits
+  for that goroutine, then closes the descriptors it was using, so nothing is
+  torn down under an in-flight operation. Context cancellation reuses the M06
+  TUN-19 ordering — the deadline clear waits for the cancel callback — and
+  `TestContextCancelUnblocksReadAndLeavesSocketUsable` proves the socket still
+  works afterwards (UDP-39, UDP-40).
+
+Benchmarks (UDP-47..49), measured on this machine (Intel i7-14650HX, loopback,
+`go test -run XXX -bench . -benchtime 5000x ./internal/transport/udp/`).
+Recorded as a baseline, not as a threshold anything asserts:
+
+| Benchmark | ns/op | B/op | allocs/op |
+|---|---|---|---|
+| `BenchmarkSend` | 2253 | 772 | 15 |
+| `BenchmarkReceive` | 2823 | 728 | 15 |
+| `BenchmarkSendReceiveRoundTrip` | 3018 (≈331k packets/s) | 728 | 15 |
+
+Blocked on a privileged run (root + `ip`/`tcpdump`):
+
+- **UDP-41..46** and the "interface binding and marking" gate.
+  `TestUDPPathsBindToTheirOwnInterface` (UDP-41..44) captures on both client
+  uplinks while exactly one path sends, so it asserts presence on the intended
+  interface *and* absence on the other. `TestUDPOversizeAndTruncation` (UDP-45)
+  and `TestUDPReducedPathMTUIsReported` (UDP-46) drive the `udp-path` and
+  `udp-sink` helper modes across the two-namespace topology; the MTU test lowers
+  `pa0` to 1280 and requires either `EMSGSIZE` or an error-queue event for a
+  1400-byte datagram. All four skip accurately without CAP_NET_ADMIN, and
+  `TestUDPPathsBindToTheirOwnInterface` additionally skips when `tcpdump` is
+  absent. Run `sudo -E env "PATH=$PATH" make test-integration` and check them
+  off once green.
+- `SO_MARK` taking effect is part of the same gate and is unprovable here:
+  unprivileged the option is refused with `EPERM`, which
+  `TestDialFWMarkIsAllOrNothing` asserts is fatal rather than tolerated, but
+  that only proves the decision, never that a marked socket routed correctly.
 
 ### Checkpoint
 
