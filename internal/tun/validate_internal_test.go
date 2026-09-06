@@ -29,14 +29,18 @@ func TestValidateConfig(t *testing.T) {
 		t.Fatalf("empty (kernel-assigned) name rejected: %v", err)
 	}
 
-	// Zero MaxPacket is valid and means "MTU".
+	// Zero MaxPacket is valid and means "the read ceiling tracks the live MTU";
+	// the ceiling itself is a device property, asserted in tun_linux_test.go.
 	c = validBase()
 	c.MaxPacket = 0
 	if err := c.validate(); err != nil {
 		t.Fatalf("zero MaxPacket rejected: %v", err)
 	}
-	if c.maxPacket() != DefaultMTU {
-		t.Fatalf("maxPacket() = %d, want %d", c.maxPacket(), DefaultMTU)
+	// An explicit ceiling at or above the MTU is valid.
+	c = validBase()
+	c.MaxPacket = MaxMTU
+	if err := c.validate(); err != nil {
+		t.Fatalf("explicit MaxPacket >= MTU rejected: %v", err)
 	}
 
 	bad := []struct {
@@ -48,12 +52,18 @@ func TestValidateConfig(t *testing.T) {
 		{"name with slash", func(c *Config) { c.Name = "red/0" }, nil},
 		{"name with space", func(c *Config) { c.Name = "red 0" }, nil},
 		{"name with NUL", func(c *Config) { c.Name = "red\x000" }, nil},
+		// The kernel's dev_valid_name reserves ':' for interface aliases.
+		{"name with colon", func(c *Config) { c.Name = "red:0" }, nil},
+		{"name with vertical tab", func(c *Config) { c.Name = "red\v0" }, nil},
 		{"name is dotdot", func(c *Config) { c.Name = ".." }, nil},
 		{"mtu below range", func(c *Config) { c.MTU = MinMTU - 1 }, ErrMTURange},
 		{"mtu above range", func(c *Config) { c.MTU = MaxMTU + 1 }, ErrMTURange},
 		{"no address", func(c *Config) { c.Address = netip.Prefix{} }, nil},
 		{"ipv6 address", func(c *Config) { c.Address = netip.MustParsePrefix("fd00::1/64") }, nil},
 		{"negative MaxPacket", func(c *Config) { c.MaxPacket = -1 }, nil},
+		// A ceiling below the MTU would make the kernel deliver packets
+		// ReadPacket is obliged to drop.
+		{"MaxPacket below MTU", func(c *Config) { c.MaxPacket = DefaultMTU - 1 }, nil},
 	}
 	for _, tc := range bad {
 		t.Run(tc.name, func(t *testing.T) {

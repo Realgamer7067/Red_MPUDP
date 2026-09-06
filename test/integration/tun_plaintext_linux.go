@@ -25,10 +25,17 @@ import (
 type plaintextPeer struct {
 	fromTUN chan []byte
 	toTUN   chan []byte
+	// wrote reports the result of every WritePacket the forwarder issues, so a
+	// caller can wait for actual receipt by the device instead of sleeping.
+	wrote chan error
 }
 
 func newPlaintextPeer() *plaintextPeer {
-	return &plaintextPeer{fromTUN: make(chan []byte, 8), toTUN: make(chan []byte, 8)}
+	return &plaintextPeer{
+		fromTUN: make(chan []byte, 8),
+		toTUN:   make(chan []byte, 8),
+		wrote:   make(chan error, 8),
+	}
 }
 
 // forwardPlaintext reads packets from dev into peer.fromTUN and writes
@@ -53,7 +60,13 @@ func forwardPlaintext(ctx context.Context, dev tun.Device, peer *plaintextPeer) 
 		for {
 			select {
 			case p := <-peer.toTUN:
-				if _, err := dev.WritePacket(p); err != nil {
+				_, err := dev.WritePacket(p)
+				select {
+				case peer.wrote <- err:
+				case <-ctx.Done():
+					return
+				}
+				if err != nil {
 					return
 				}
 			case <-ctx.Done():
@@ -131,7 +144,37 @@ func tunPlaintextCheck() int {
 		fmt.Fprintln(os.Stderr, "could not enqueue reply")
 		return 1
 	}
-	time.Sleep(100 * time.Millisecond) // let the writer drain
+
+	// Wait for the device to actually accept the reply rather than sleeping and
+	// hoping. Bounded by the same ctx deadline as everything else here.
+	select {
+	case err := <-peer.wrote:
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "write reply to tun:", err)
+			return 1
+		}
+	case <-ctx.Done():
+		fmt.Fprintln(os.Stderr, "reply was never written to the tun device")
+		return 1
+	}
+
+	// Stronger proof for TUN-29: the reply is addressed to this socket, so the
+	// kernel must deliver it back up out of red0. Deadline-bounded, and reported
+	// separately from the write above so a privileged run says which step broke.
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		fmt.Fprintln(os.Stderr, "set read deadline:", err)
+		return 1
+	}
+	rbuf := make([]byte, 64)
+	n, err := conn.Read(rbuf)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "read reply back from the kernel:", err)
+		return 1
+	}
+	if got := string(rbuf[:n]); got != "reply" {
+		fmt.Fprintf(os.Stderr, "reply payload = %q, want %q\n", got, "reply")
+		return 1
+	}
 	return 0
 }
 

@@ -51,6 +51,11 @@ var (
 	// cannot hold a maximum-size packet plus the slack needed to detect an
 	// oversize packet.
 	ErrBufferTooSmall = errors.New("tun: read buffer smaller than the configured maximum")
+	// ErrMTUAboveMaxPacket is returned by SetMTU when an explicit Config.MaxPacket
+	// ceiling would be exceeded by the new MTU. Raising the MTU past the read
+	// ceiling would make the kernel deliver packets the reader must drop, so the
+	// change is refused rather than silently applied.
+	ErrMTUAboveMaxPacket = errors.New("tun: mtu would exceed the configured MaxPacket ceiling")
 )
 
 // Config describes the interface to create.
@@ -61,16 +66,18 @@ type Config struct {
 	Address netip.Prefix
 	// MTU is the interface MTU; it must be in [MinMTU, MaxMTU].
 	MTU int
-	// MaxPacket bounds ReadPacket. Zero means MTU. A packet larger than this is
-	// dropped and counted (RxOversize), never returned truncated.
+	// MaxPacket is an explicit, fixed ceiling on ReadPacket. Zero means "track
+	// the live MTU": the ceiling follows every authenticated SetMTU change, so a
+	// raised MTU does not turn valid packets into RxOversize drops. A non-zero
+	// value is a hard ceiling instead — it never moves, and SetMTU refuses any
+	// MTU above it with ErrMTUAboveMaxPacket. It must therefore be >= MTU.
+	//
+	// Either way a packet larger than the ceiling is dropped and counted
+	// (RxOversize), never returned truncated.
+	//
+	// Read buffers are sized against the static MaxMTU, not against this value
+	// or the current MTU — see ReadPacket.
 	MaxPacket int
-}
-
-func (c Config) maxPacket() int {
-	if c.MaxPacket > 0 {
-		return c.MaxPacket
-	}
-	return c.MTU
 }
 
 // validate checks a Config before any descriptor is opened or netlink mutation
@@ -90,18 +97,24 @@ func (c Config) validate() error {
 	if c.MaxPacket < 0 {
 		return errors.New("tun: MaxPacket must not be negative")
 	}
+	// An explicit ceiling below the MTU would make the kernel deliver
+	// MTU-sized packets that ReadPacket is required to drop.
+	if c.MaxPacket > 0 && c.MaxPacket < c.MTU {
+		return fmt.Errorf("tun: MaxPacket %d is below MTU %d", c.MaxPacket, c.MTU)
+	}
 	return nil
 }
 
-// validateName rejects a name the kernel would truncate or that contains a
-// path or whitespace character (TUN-06).
+// validateName rejects a name the kernel would truncate or reject. The
+// character set mirrors the kernel's dev_valid_name: '/', ':' (reserved for
+// interface aliases) and any whitespace, plus "." and ".." (TUN-06).
 func validateName(name string) error {
 	switch {
 	case name == "":
 		return errors.New("tun: interface name must not be empty")
 	case len(name) > ifaceNameMax:
 		return fmt.Errorf("tun: interface name %q exceeds %d bytes", name, ifaceNameMax)
-	case strings.ContainsAny(name, "/ \t\n\r\x00") || name == "." || name == "..":
+	case strings.ContainsAny(name, "/: \t\n\v\f\r\x00") || name == "." || name == "..":
 		return fmt.Errorf("tun: interface name %q contains an invalid character", name)
 	}
 	return nil
@@ -123,6 +136,16 @@ func guardMTU(current, target int, authenticated bool) (int, error) {
 
 // Stats is a snapshot of a device's bounded counters (TUN-25). The set is
 // fixed; there are no per-packet or per-peer labels.
+//
+// Counter relationships, so a reader never has to guess:
+//   - TxErrors counts every failed WritePacket, including a short write.
+//     TxShort is the subset of those that were short writes, so
+//     TxShort <= TxErrors always.
+//   - TxPackets and TxBytes count fully written packets only. The bytes the
+//     kernel accepted during a short write are deliberately not added to
+//     TxBytes — a partially written packet is not a delivered packet.
+//   - RxOversize and RxErrors are disjoint: an oversize packet was read
+//     successfully and then dropped, which is not a descriptor failure.
 type Stats struct {
 	RxPackets  uint64
 	RxBytes    uint64
@@ -164,11 +187,18 @@ type Device interface {
 	// Address is the configured IPv4 address and prefix.
 	Address() netip.Prefix
 
-	// ReadPacket reads one complete IPv4 packet into buf, which the caller owns
-	// and which must be larger than the configured maximum packet size. It
-	// returns the packet length. A ctx that is cancelled unblocks the read
-	// with ctx.Err(); a permanent descriptor failure returns a different error
-	// (TUN-18, TUN-19, TUN-20).
+	// ReadPacket reads one complete IPv4 packet into buf, which the caller owns.
+	// It returns the packet length.
+	//
+	// buf must be larger than the packet ceiling that is in force for the whole
+	// life of the device. Because a default (zero MaxPacket) ceiling tracks the
+	// live MTU, size buf against the static MaxMTU — for example MaxMTU+64 —
+	// never against the MTU the device happens to hold right now. A buffer that
+	// is large enough today can otherwise be rejected with ErrBufferTooSmall
+	// after an authenticated MTU increase.
+	//
+	// A ctx that is cancelled unblocks the read with ctx.Err(); a permanent
+	// descriptor failure returns a different error (TUN-18, TUN-19, TUN-20).
 	ReadPacket(ctx context.Context, buf []byte) (int, error)
 
 	// WritePacket writes one complete IPv4 packet from the caller-owned buf. A
@@ -177,7 +207,12 @@ type Device interface {
 
 	// SetMTU changes the live interface MTU. A reduction always succeeds; an
 	// increase succeeds only when authenticatedIncrease is true (TUN-16,
-	// TUN-17).
+	// TUN-17), and never above an explicit Config.MaxPacket ceiling
+	// (ErrMTUAboveMaxPacket).
+	//
+	// Concurrent calls are serialized: each one authorizes against the MTU left
+	// by the call before it, so two apparent reductions can never compose into
+	// an unauthenticated effective increase.
 	SetMTU(mtu int, authenticatedIncrease bool) error
 
 	// Stats returns a snapshot of the bounded counters (TUN-25).

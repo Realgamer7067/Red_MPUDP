@@ -655,7 +655,11 @@ Read and write complete IPv4 packets through a safely owned TUN interface.
 - [x] **TUN-03:** Create `internal/tun/tun_linux.go` with Linux build tags.
 - [x] **TUN-04:** Open `/dev/net/tun` with close-on-exec behavior.
 - [x] **TUN-05:** Request `IFF_TUN | IFF_NO_PI`.
-- [x] **TUN-06:** Validate the requested interface name before ioctl.
+- [x] **TUN-06:** Validate the requested interface name before ioctl. Rejects
+  the kernel's full `dev_valid_name` set — `/`, `:` (reserved for interface
+  aliases), any whitespace, NUL, `.`, `..`, and over-IFNAMSIZ names — asserted
+  in `TestValidateConfig` and, through `Open`, in
+  `TestConfigValidationRunsBeforeOpen`.
 - [x] **TUN-07:** Return the actual kernel-assigned name.
 - [x] **TUN-08:** Ensure closing the object closes the file descriptor once.
 - [x] **TUN-09:** Ensure a partial constructor failure closes the descriptor.
@@ -669,18 +673,37 @@ Read and write complete IPv4 packets through a safely owned TUN interface.
 - [x] **TUN-13:** Bring the interface up.
 - [x] **TUN-14:** Read back and verify address, MTU, flags, and ifindex.
 - [x] **TUN-15:** Reject an MTU outside 1112 through 1400 before netlink mutation.
-- [x] **TUN-16:** Add a method to reduce MTU after PMTU negotiation.
+- [x] **TUN-16:** Add a method to reduce MTU after PMTU negotiation. The
+  default (zero `MaxPacket`) read ceiling tracks the live MTU in both
+  directions, so an authenticated increase does not leave valid packets being
+  dropped as oversize — `TestLinuxDefaultMaxPacketTracksAuthenticatedMTUIncrease`.
+  An explicit `MaxPacket` is instead a fixed ceiling the MTU may not exceed
+  (`ErrMTUAboveMaxPacket`) — `TestLinuxExplicitMaxPacketIsAHardCeiling`.
 - [x] **TUN-17:** Reject an attempted live increase unless the session has an
-  authenticated committed value.
+  authenticated committed value. The check and the netlink mutation share one
+  device mutex, so concurrent callers authorize against the value the previous
+  call left rather than a stale snapshot — two apparent reductions can no longer
+  compose into an unauthenticated effective increase
+  (`TestLinuxSetMTUConcurrentCallsAreSerialized`, which asserts the netlink peak
+  in-flight count is 1). The same mutex is held by `Close`
+  (`TestLinuxSetMTUDoesNotRaceClose`).
 
 ### Packet I/O
 
 - [x] **TUN-18:** Read one complete packet into a caller-owned buffer.
 - [x] **TUN-19:** Distinguish context cancellation from permanent descriptor
-  failure.
+  failure. The cancel callback's deadline clear is ordered *after* the callback
+  completes, so a read that returns while the callback is still in flight cannot
+  leave a permanently expired deadline behind and poison later reads
+  (`TestLinuxReadPacketOrdersCancelCallbackBeforeClearingDeadline`, which also
+  reuses the device with a fresh context). Unit-proven against a fake that
+  models the deadline as state; the same property on the real descriptor stays
+  root-gated (below).
 - [x] **TUN-20:** Reject a read larger than the configured packet buffer.
 - [x] **TUN-21:** Write one complete packet from a caller-owned buffer.
-- [x] **TUN-22:** Treat a short TUN write as an error.
+- [x] **TUN-22:** Treat a short TUN write as an error, counted in `TxErrors`
+  with `TxShort` as its subset; the partially accepted bytes are not credited to
+  `TxBytes` (`TestLinuxWriteShort`, `TestLinuxWriteErrorNotCountedAsShort`).
 - [x] **TUN-23:** Return every pooled buffer on read failure.
 - [x] **TUN-24:** Return every pooled buffer on write failure.
 - [x] **TUN-25:** Add packet and byte counters without unbounded labels.
@@ -729,7 +752,11 @@ Landed:
   (`ctx.Err()`, not counted) from a permanent descriptor error, and drops +
   counts an oversize packet rather than truncating. `WritePacket` treats a
   short kernel write as `ErrShortWrite`. `SetMTU` reduces freely and refuses
-  an unauthenticated live increase. `Close` is `sync.Once` (one `close(fd)`);
+  an unauthenticated live increase; its closed check, authorization, netlink
+  mutation and store all run under one device mutex that `Close` also takes, so
+  concurrent callers cannot authorize against a stale MTU and the netlink socket
+  is never closed under an in-flight change. Read and write hold no lock, so a
+  parked read never delays `Close`. `Close` is `sync.Once` (one `close(fd)`);
   the interface is non-persistent by default (v1 never issues `TUNSETPERSIST`,
   TUN-10) and disappears with the descriptor. `ReadInto` / `WriteFrom`
   operate on pooled `*packetbuf.Buffer` and release on every error path
@@ -738,12 +765,25 @@ Landed:
   logic through an injected fake `io.ReadWriteCloser` + fake `linkConfigurer`
   and cover every error path. `validate` and `guardMTU` are asserted directly
   (`validate_internal_test.go`); `TestConfigValidationRunsBeforeOpen` proves
-  `Open` runs validation before it touches a descriptor.
+  `Open` runs validation before it touches a descriptor. The fake descriptor
+  models the read deadline as state (so a deadline left armed is observable) and
+  the fake `linkConfigurer` records the peak number of simultaneous netlink
+  mutations (so serialization is observable); each of the five M06 review
+  regressions was confirmed to fail against the pre-fix code before being kept.
+
+  Read buffers must be sized against the static `MaxMTU`, never the current MTU:
+  a default read ceiling tracks the MTU, so a buffer sized `DefaultMTU+64` would
+  start returning `ErrBufferTooSmall` after an authenticated increase. Documented
+  on `Device.ReadPacket`, `Config.MaxPacket` and `ReadInto`.
 - Integration (`test/integration`, `integration` tag): `tun-plaintext` helper
   mode opens `red0` inside a namespace, asserts MTU 1180, and moves a real
   cleartext IPv4/UDP packet from the kernel through a TUN reader to an
-  in-memory peer (`forwardPlaintext`). The forwarder is behind the
-  `integration` build tag (TUN-30) — `go build ./cmd/...` cannot reach it.
+  in-memory peer (`forwardPlaintext`). The reply leg is validated in two
+  separately reported, deadline-bounded steps instead of a fixed sleep: the
+  forwarder reports each `WritePacket` result on `peer.wrote`, and the helper
+  then reads the reply back off its own UDP socket under a read deadline. The
+  forwarder is behind the `integration` build tag (TUN-30) — `go build ./cmd/...`
+  cannot reach it.
 - `cmd/red-mpudp`: `TestNoPlaintextForwardingSubcommand` (no `forward` /
   `plaintext` subcommand or help text) and `TestReleaseBinaryHasNoForwardingSymbols`
   (a default-tags `go build` of the CLI contains none of the forwarder's
@@ -762,7 +802,10 @@ Blocked on a privileged run (root + `ip`/`tc`/`nft`):
   (`TestOpenRealTUNCloseUnblocksParkedRead`,
   `TestOpenRealTUNContextCancelUnblocksParkedRead` — first proof the Go runtime
   poller accepts the `/dev/net/tun` fd, which both context cancellation and
-  Close rely on). Run `sudo -E env "PATH=$PATH" make test-integration` plus
+  Close rely on, including that a cancelled read leaves no deadline armed on the
+  real fd). The second, stronger half of the TUN-29 reply check — reading the
+  synthetic reply back off the helper's own UDP socket — is likewise unverified
+  until this run. Run `sudo -E env "PATH=$PATH" make test-integration` plus
   `sudo -E env "PATH=$PATH" /usr/bin/go test ./internal/tun/` and check them
   off once green.
 

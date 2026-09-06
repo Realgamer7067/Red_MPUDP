@@ -34,12 +34,27 @@ type deadlineReader interface {
 }
 
 type linuxDevice struct {
-	rw        io.ReadWriteCloser
-	name      string
-	index     int
-	addr      netip.Prefix
-	mtu       atomic.Int64
-	maxPacket int
+	rw    io.ReadWriteCloser
+	name  string
+	index int
+	addr  netip.Prefix
+
+	// mu serializes the whole SetMTU critical section — the closed check, the
+	// authorization decision, the netlink mutation and the store — and is also
+	// held by Close, so the descriptor and the netlink socket are never torn
+	// down underneath an in-flight MTU change. Without it two callers can each
+	// authorize against the same stale MTU snapshot and land two "reductions"
+	// that compose into an unauthenticated effective increase.
+	//
+	// mu is deliberately NOT held across ReadPacket or WritePacket: a read
+	// parked in the kernel must never delay Close.
+	mu sync.Mutex
+	// mtu is written only under mu; it is atomic so MTU() and ReadPacket can
+	// read it without blocking on an in-flight netlink call.
+	mtu atomic.Int64
+	// explicitMax is Config.MaxPacket verbatim. Zero means the read ceiling
+	// tracks the live MTU (see maxPacket).
+	explicitMax int
 
 	link linkConfigurer
 
@@ -48,6 +63,17 @@ type linuxDevice struct {
 	closed    atomic.Bool
 
 	stats counters
+}
+
+// maxPacket is the current read ceiling. An explicit Config.MaxPacket is a
+// fixed hard ceiling; zero means the ceiling follows the live MTU, so an
+// authenticated MTU increase does not turn newly valid packets into RxOversize
+// drops.
+func (d *linuxDevice) maxPacket() int {
+	if d.explicitMax > 0 {
+		return d.explicitMax
+	}
+	return int(d.mtu.Load())
 }
 
 // Open creates a non-persistent TUN interface, configures its address and MTU
@@ -135,12 +161,12 @@ func Open(cfg Config) (Device, error) {
 	}
 
 	d := &linuxDevice{
-		rw:        os.NewFile(uintptr(fd), devNetTun+":"+name),
-		name:      name,
-		index:     index,
-		addr:      cfg.Address,
-		maxPacket: cfg.maxPacket(),
-		link:      &rtnlLink{conn: rtnl, index: index},
+		rw:          os.NewFile(uintptr(fd), devNetTun+":"+name),
+		name:        name,
+		index:       index,
+		addr:        cfg.Address,
+		explicitMax: cfg.MaxPacket,
+		link:        &rtnlLink{conn: rtnl, index: index},
 	}
 	d.mtu.Store(int64(cfg.MTU))
 	return d, nil
@@ -189,17 +215,32 @@ func (d *linuxDevice) ReadPacket(ctx context.Context, buf []byte) (int, error) {
 	if d.closed.Load() {
 		return 0, ErrClosed
 	}
-	if len(buf) <= d.maxPacket {
-		return 0, fmt.Errorf("%w: len(buf)=%d, need > %d", ErrBufferTooSmall, len(buf), d.maxPacket)
+	// Snapshot the ceiling once: a concurrent authenticated SetMTU must not let
+	// the buffer-size check and the oversize check disagree, which is what would
+	// allow a kernel-truncated packet through as if it were complete.
+	ceiling := d.maxPacket()
+	if len(buf) <= ceiling {
+		return 0, fmt.Errorf("%w: len(buf)=%d, need > %d", ErrBufferTooSmall, len(buf), ceiling)
 	}
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
 
 	if dr, ok := d.rw.(deadlineReader); ok {
-		stop := context.AfterFunc(ctx, func() { _ = dr.SetReadDeadline(time.Unix(0, 1)) })
+		// The callback arms a past deadline to unblock a parked read. Clearing
+		// the deadline afterwards must be ordered AFTER the callback, or the
+		// clear can land first and leave a permanently expired deadline on the
+		// descriptor — poisoning every later read. stop() reports false when the
+		// callback has already started, so in that case wait for it to finish.
+		done := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() {
+			defer close(done)
+			_ = dr.SetReadDeadline(time.Unix(0, 1))
+		})
 		defer func() {
-			stop()
+			if !stop() {
+				<-done
+			}
 			_ = dr.SetReadDeadline(time.Time{})
 		}()
 	}
@@ -215,9 +256,9 @@ func (d *linuxDevice) ReadPacket(ctx context.Context, buf []byte) (int, error) {
 		d.stats.rxErrors.Add(1)
 		return 0, fmt.Errorf("tun read: %w", err) // permanent descriptor failure
 	}
-	if n > d.maxPacket {
+	if n > ceiling {
 		d.stats.rxOversize.Add(1)
-		return 0, fmt.Errorf("%w: %d > %d", ErrPacketTooLarge, n, d.maxPacket) // TUN-20
+		return 0, fmt.Errorf("%w: %d > %d", ErrPacketTooLarge, n, ceiling) // TUN-20
 	}
 	d.stats.rxPackets.Add(1)
 	d.stats.rxBytes.Add(uint64(n))
@@ -241,6 +282,11 @@ func (d *linuxDevice) WritePacket(buf []byte) (int, error) {
 		return n, fmt.Errorf("tun write: %w", err)
 	}
 	if n != len(buf) {
+		// A short write is a failed write: count it in both TxErrors and the
+		// TxShort subset so TxErrors is the single "writes that failed" number.
+		// The accepted bytes are not added to TxBytes — a partially written
+		// packet is not a delivered packet.
+		d.stats.txErrors.Add(1)
 		d.stats.txShort.Add(1)
 		return n, fmt.Errorf("%w: wrote %d of %d", ErrShortWrite, n, len(buf))
 	}
@@ -249,8 +295,15 @@ func (d *linuxDevice) WritePacket(buf []byte) (int, error) {
 	return n, nil
 }
 
-// SetMTU implements TUN-16 and TUN-17.
+// SetMTU implements TUN-16 and TUN-17. The closed check, the authorization
+// decision, the netlink mutation and the store all happen under d.mu, so a
+// concurrent caller authorizes against the value this call leaves behind rather
+// than against a stale snapshot, and Close cannot pull the netlink socket out
+// from under an in-flight change.
 func (d *linuxDevice) SetMTU(mtu int, authenticatedIncrease bool) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	if d.closed.Load() {
 		return ErrClosed
 	}
@@ -258,6 +311,11 @@ func (d *linuxDevice) SetMTU(mtu int, authenticatedIncrease bool) error {
 	applied, err := guardMTU(cur, mtu, authenticatedIncrease)
 	if err != nil {
 		return err
+	}
+	// An explicit read ceiling never moves, so the MTU may not climb past it:
+	// the kernel would deliver packets ReadPacket is obliged to drop.
+	if d.explicitMax > 0 && applied > d.explicitMax {
+		return fmt.Errorf("%w: %d > %d", ErrMTUAboveMaxPacket, applied, d.explicitMax)
 	}
 	if applied == cur {
 		return nil
@@ -272,6 +330,11 @@ func (d *linuxDevice) SetMTU(mtu int, authenticatedIncrease bool) error {
 // Close implements TUN-08 and TUN-10.
 func (d *linuxDevice) Close() error {
 	d.closeOnce.Do(func() {
+		// Same mutex as SetMTU: never close the netlink socket while a netlink
+		// MTU mutation is in flight. Reads and writes hold no lock, so a parked
+		// ReadPacket cannot delay this.
+		d.mu.Lock()
+		defer d.mu.Unlock()
 		d.closed.Store(true)
 		errFile := d.rw.Close()
 		errNL := d.link.close()

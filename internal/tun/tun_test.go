@@ -29,11 +29,13 @@ func TestConfigValidationRunsBeforeOpen(t *testing.T) {
 		{"name too long", func(c *tun.Config) { c.Name = "an-interface-name-way-too-long" }},
 		{"name with slash", func(c *tun.Config) { c.Name = "red/0" }},
 		{"name with space", func(c *tun.Config) { c.Name = "red 0" }},
+		{"name with colon", func(c *tun.Config) { c.Name = "red:0" }},
 		{"mtu too low", func(c *tun.Config) { c.MTU = tun.MinMTU - 1 }},
 		{"mtu too high", func(c *tun.Config) { c.MTU = tun.MaxMTU + 1 }},
 		{"no address", func(c *tun.Config) { c.Address = netip.Prefix{} }},
 		{"ipv6 address", func(c *tun.Config) { c.Address = netip.MustParsePrefix("fd00::1/64") }},
 		{"negative maxpacket", func(c *tun.Config) { c.MaxPacket = -1 }},
+		{"maxpacket below mtu", func(c *tun.Config) { c.MaxPacket = tun.DefaultMTU - 1 }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
