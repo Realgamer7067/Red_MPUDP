@@ -110,9 +110,6 @@ func TestTruncatedDatagramIsDroppedNotTruncated(t *testing.T) {
 	}
 
 	small := make([]byte, 100)
-	for i := range small {
-		small[i] = 0xEE
-	}
 	n, meta, err := readWithin(t, srv, small, 2*time.Second)
 	if !errors.Is(err, transport.ErrTruncated) {
 		t.Fatalf("err = %v, want ErrTruncated", err)
@@ -123,6 +120,13 @@ func TestTruncatedDatagramIsDroppedNotTruncated(t *testing.T) {
 	if !meta.Truncated {
 		t.Fatal("meta.Truncated not set")
 	}
+	// dst's contents are deliberately NOT asserted here. The kernel copies as
+	// much of the datagram as fits before reporting the length that did not,
+	// so small now holds a prefix of a dropped datagram. n=0 plus ErrTruncated
+	// is the whole contract; the bytes are unspecified and must never be
+	// parsed. Asserting they were untouched would encode a guarantee the
+	// implementation does not make.
+
 	// The next read must still work: the truncated datagram was consumed, not
 	// left to desynchronise the socket.
 	if err := cli.WriteTo(context.Background(), []byte("after"), transport.Endpoint{}); err != nil {
@@ -244,14 +248,18 @@ func TestPathErrorReachesReaderRegardlessOfRace(t *testing.T) {
 		t.Skipf("no path error observed within the deadline (loopback ICMP suppression): %v", err)
 	}
 	t.Logf("path error: %s", got)
-	// UDP-36: the quoted peer comes from the kernel's offender sockaddr, not
-	// from anything in the datagram.
+	// UDP-36 / UDP-37: whichever goroutine won the race, the event must be
+	// attributed to this path's peer. That is the property under test.
 	if got.Peer != deadAddr {
-		t.Fatalf("PathError.Peer = %v, want the unreachable endpoint %v", got.Peer, deadAddr)
+		t.Fatalf("PathError.Peer = %v, want the unreachable endpoint %v — an event that "+
+			"cannot be attributed to a path would be applied to the wrong one", got.Peer, deadAddr)
 	}
-	if got.Local {
-		t.Fatal("an ICMP error-queue event was reported as a local error")
-	}
+	// Local is deliberately NOT asserted. Local=true means the normal receive
+	// path consumed the pending socket error first; Local=false means the
+	// error-queue goroutine parsed the ICMP message first. Both are correct and
+	// which one happens is exactly the race this test exercises — pinning it
+	// would make the test assert scheduling, not behaviour.
+	t.Logf("won by the %s path", map[bool]string{true: "normal-read", false: "error-queue"}[got.Local])
 }
 
 // GATE "closing transport leaves no goroutine blocked" (UDP-39, UDP-40): with a
@@ -341,5 +349,138 @@ func TestReadAfterCloseIsErrClosed(t *testing.T) {
 	}
 	if _, err := srv.ReadPathError(context.Background()); !errors.Is(err, transport.ErrClosed) {
 		t.Fatalf("ReadPathError after close = %v, want ErrClosed", err)
+	}
+}
+
+// Blocker 8 companion: state the truncation contract as a test, so the fact
+// that dst is written before truncation is known cannot be forgotten.
+func TestTruncatedReadLeavesBufferContentsUnspecified(t *testing.T) {
+	srv := newServer(t, udp.ServerConfig{})
+	cli := newClient(t, srv.LocalAddr(), udp.ClientConfig{})
+
+	payload := make([]byte, 600)
+	for i := range payload {
+		payload[i] = 0x7C
+	}
+	if err := cli.WriteTo(context.Background(), payload, transport.Endpoint{}); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	dst := make([]byte, 50)
+	n, meta, err := readWithin(t, srv, dst, 2*time.Second)
+	if !errors.Is(err, transport.ErrTruncated) || n != 0 || !meta.Truncated {
+		t.Fatalf("got (n=%d, truncated=%v, err=%v), want (0, true, ErrTruncated)", n, meta.Truncated, err)
+	}
+	// The kernel really does write a prefix into dst. Recording that here keeps
+	// the documented contract ("contents unspecified") honest rather than
+	// aspirational.
+	t.Logf("dst[0]=%#x after a truncated read — a prefix of the dropped datagram, "+
+		"which is exactly why n=0 and the bytes must not be parsed", dst[0])
+}
+
+// UDP-28 / blocker 2: the server honours a caller-selected outbound interface.
+func TestServerReplyHonoursSelectedInterface(t *testing.T) {
+	srv := newServer(t, udp.ServerConfig{})
+	cli := newClient(t, srv.LocalAddr(), udp.ClientConfig{})
+
+	if err := cli.WriteTo(context.Background(), []byte("req"), transport.Endpoint{}); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	buf := make([]byte, 512)
+	_, meta, err := readWithin(t, srv, buf, 2*time.Second)
+	if err != nil {
+		t.Fatalf("server read: %v", err)
+	}
+	if meta.IfIndex == 0 {
+		t.Fatal("no receive ifindex to reply through")
+	}
+
+	// Replying through the interface the request arrived on must work...
+	err = srv.WriteTo(context.Background(), []byte("reply"),
+		transport.Endpoint{AddrPort: meta.Source, IfIndex: meta.IfIndex})
+	if err != nil {
+		t.Fatalf("reply via ifindex %d: %v", meta.IfIndex, err)
+	}
+	n, _, err := readWithin(t, cli, buf, 2*time.Second)
+	if err != nil || string(buf[:n]) != "reply" {
+		t.Fatalf("client got (%q, %v)", buf[:n], err)
+	}
+
+	// ...and a bogus index must fail loudly rather than silently letting the
+	// routing table choose.
+	err = srv.WriteTo(context.Background(), []byte("nope"),
+		transport.Endpoint{AddrPort: meta.Source, IfIndex: 1 << 20})
+	if !errors.Is(err, udp.ErrBadIfIndex) {
+		t.Fatalf("bogus ifindex returned %v, want ErrBadIfIndex", err)
+	}
+}
+
+// UDP-40 / blocker 4: after Close, every method reports ErrClosed — ahead of an
+// invalid destination, an oversized payload, a cancelled context, and a queued
+// path error alike. A caller shutting down must never have to tell "bad
+// request" apart from "gone".
+func TestAfterCloseEverythingIsErrClosed(t *testing.T) {
+	srv := newServer(t, udp.ServerConfig{})
+	cli := newClient(t, srv.LocalAddr(), udp.ClientConfig{MaxDatagram: 128})
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := cli.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := cli.Close(); err != nil { // idempotent
+		t.Fatalf("second Close: %v", err)
+	}
+
+	checks := []struct {
+		name string
+		fn   func() error
+	}{
+		{"ReadInto", func() error {
+			_, _, err := cli.ReadInto(context.Background(), make([]byte, 512))
+			return err
+		}},
+		{"ReadInto with a cancelled context", func() error {
+			_, _, err := cli.ReadInto(cancelled, make([]byte, 512))
+			return err
+		}},
+		{"WriteTo", func() error {
+			return cli.WriteTo(context.Background(), []byte("x"), transport.Endpoint{})
+		}},
+		{"WriteTo oversized", func() error {
+			return cli.WriteTo(context.Background(), make([]byte, 4096), transport.Endpoint{})
+		}},
+		{"WriteTo to the wrong destination", func() error {
+			return cli.WriteTo(context.Background(), []byte("x"),
+				transport.Endpoint{AddrPort: netip.AddrPortFrom(loopback, 1)})
+		}},
+		{"WriteTo with a cancelled context", func() error {
+			return cli.WriteTo(cancelled, []byte("x"), transport.Endpoint{})
+		}},
+		{"ReadPathError", func() error {
+			_, err := cli.ReadPathError(context.Background())
+			return err
+		}},
+		{"ReadPathError with a cancelled context", func() error {
+			_, err := cli.ReadPathError(cancelled)
+			return err
+		}},
+	}
+	for _, c := range checks {
+		if err := c.fn(); !errors.Is(err, transport.ErrClosed) {
+			t.Errorf("%s after Close = %v, want ErrClosed", c.name, err)
+		}
+	}
+
+	// The server: an invalid destination must also lose to ErrClosed.
+	if err := srv.Close(); err != nil {
+		t.Fatalf("server Close: %v", err)
+	}
+	if err := srv.WriteTo(context.Background(), []byte("x"), transport.Endpoint{}); !errors.Is(err, transport.ErrClosed) {
+		t.Errorf("server WriteTo with an invalid destination after Close = %v, want ErrClosed", err)
+	}
+	if err := srv.WriteTo(context.Background(), []byte("x"),
+		transport.Endpoint{AddrPort: netip.AddrPortFrom(loopback, 9), IfIndex: 1 << 20}); !errors.Is(err, transport.ErrClosed) {
+		t.Errorf("server WriteTo with a bad ifindex after Close = %v, want ErrClosed", err)
 	}
 }

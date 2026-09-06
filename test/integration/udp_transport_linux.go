@@ -71,18 +71,36 @@ func udpPathCheck(arg string) int {
 				return 1
 			}
 
-		case "oversize": // UDP-45 (send side of the truncation proof)
-			big := make([]byte, 2000)
+		case "wire-oversize": // UDP-45: prove MSG_TRUNC on the wire
+			// The datagram must be large enough to overflow the sink's buffer
+			// but small enough that this socket will actually transmit it —
+			// anything above MaxDatagram is rejected locally and never reaches
+			// the sink, so it could not demonstrate truncation at all.
+			size := cli.MaxDatagramSize() - 100
+			if size <= 64 {
+				fmt.Fprintf(os.Stderr, "udp-path: MaxDatagramSize %d leaves no room above the 64-byte sink\n",
+					cli.MaxDatagramSize())
+				return 1
+			}
+			if err := cli.WriteTo(ctx, make([]byte, size), transport.Endpoint{}); err != nil {
+				fmt.Fprintf(os.Stderr, "udp-path: sending %d bytes (must reach the wire): %v\n", size, err)
+				return 1
+			}
+			fmt.Fprintf(os.Stderr, "udp-path: sent %d bytes to a 64-byte sink\n", size)
+
+		case "local-oversize": // UDP-38: rejected before the wire
+			big := make([]byte, cli.MaxDatagramSize()+1)
 			if err := cli.WriteTo(ctx, big, transport.Endpoint{}); !errors.Is(err, transport.ErrOversize) {
-				fmt.Fprintf(os.Stderr, "udp-path: oversize send returned %v, want ErrOversize\n", err)
+				fmt.Fprintf(os.Stderr, "udp-path: a %d-byte send returned %v, want ErrOversize\n", len(big), err)
 				return 1
 			}
 
 		case "pmtu": // UDP-46
-			// The caller lowered this path's MTU. With IP_MTU_DISCOVER set to
-			// PMTUDISC_DO the kernel must refuse a datagram above it rather than
-			// fragment: either synchronously with EMSGSIZE, or by posting an
-			// error-queue event. Both are acceptable; silence is not.
+			// The caller lowered this path's MTU and is running a real sink, so
+			// the only thing that should stop this datagram is the reduced MTU.
+			// With IP_PMTUDISC_DO the kernel must refuse it rather than
+			// fragment: synchronously with EMSGSIZE, or via an error-queue
+			// event. Silence fails.
 			payload := make([]byte, 1400)
 			werr := cli.WriteTo(ctx, payload, transport.Endpoint{})
 			if errors.Is(werr, transport.ErrOversize) {
@@ -96,6 +114,22 @@ func udpPathCheck(arg string) int {
 				fmt.Fprintf(os.Stderr, "udp-path: a %d-byte datagram over a reduced-MTU path "+
 					"produced neither EMSGSIZE (write err: %v) nor an error-queue event: %v\n",
 					len(payload), werr, perr)
+				return 1
+			}
+			// A stray ICMP — a port-unreachable from a sinkless port, say —
+			// must not be allowed to pass as PMTU feedback. Require the event to
+			// name this path's server and to carry a credible next-hop MTU:
+			// below what we tried, and at or above the IPv4 floor.
+			if pe.Peer != server {
+				fmt.Fprintf(os.Stderr, "udp-path: error-queue event quotes %s, not this path's server %s\n",
+					pe.Peer, server)
+				return 1
+			}
+			if pe.MTU < 576 || pe.MTU >= len(payload) {
+				fmt.Fprintf(os.Stderr, "udp-path: event carries MTU %d, which is not credible PMTU "+
+					"feedback for a %d-byte datagram (want 576 <= mtu < %d); this looks like an "+
+					"unrelated ICMP error, not fragmentation-needed: %s\n",
+					pe.MTU, len(payload), len(payload), pe)
 				return 1
 			}
 			fmt.Fprintf(os.Stderr, "udp-path: pmtu observed on the error queue: %s\n", pe)
@@ -138,6 +172,12 @@ func udpSinkCheck(arg string) int {
 		return 1
 	}
 	defer srv.Close()
+
+	// Explicit readiness: the socket is bound, so a sender may start. The test
+	// waits for this line instead of sleeping and hoping, which is the only way
+	// to be sure a datagram cannot be sent into a socket that does not exist yet.
+	fmt.Printf("ready %s\n", srv.LocalAddr())
+	os.Stdout.Sync()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

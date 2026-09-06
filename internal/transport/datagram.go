@@ -88,11 +88,19 @@ func (p PathError) String() string {
 //
 //   - ReadInto: the caller owns dst and must not alter it while the call runs.
 //     On return the first n bytes are the datagram and the caller owns them
-//     again. On any error, including ErrTruncated, n is 0 and dst holds nothing
-//     the caller may rely on.
+//     again. On any error, including ErrTruncated, n is 0.
+//
+//     On an error the CONTENTS OF dst ARE UNSPECIFIED. The kernel copies as
+//     much of an oversized datagram as fits before reporting the length that
+//     did not fit, so dst is generally partly overwritten with a prefix of a
+//     dropped datagram. n=0 and ErrTruncated are the contract; the bytes are
+//     not. A caller must never parse, forward, or otherwise look at dst except
+//     for the n bytes of a successful read.
+//
 //   - WriteTo: the caller owns pkt throughout. The implementation copies or
 //     hands it to the kernel before returning and never keeps it, so the caller
 //     may release a pooled buffer as soon as WriteTo returns.
+//
 //   - ReadPathError returns values, not buffers, so nothing is shared.
 //
 // # Concurrency
@@ -103,7 +111,8 @@ func (p PathError) String() string {
 type DatagramIO interface {
 	// ReadInto reads one datagram into dst. A cancelled ctx unblocks it with
 	// ctx.Err(); Close unblocks it with ErrClosed. A datagram larger than dst
-	// is dropped and reported as ErrTruncated with meta.Truncated set.
+	// is dropped and reported as ErrTruncated with meta.Truncated set and n=0;
+	// dst's contents are then unspecified and must not be parsed.
 	ReadInto(ctx context.Context, dst []byte) (n int, meta ReceiveMeta, err error)
 
 	// WriteTo sends pkt to dst. A connected client socket ignores dst's address

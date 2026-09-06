@@ -97,3 +97,20 @@ func parseErrorQueue(oob []byte, offender unix.Sockaddr) (transport.PathError, b
 	}
 	return transport.PathError{}, false
 }
+
+// buildPktinfo encodes an IP_PKTINFO control message selecting the outbound
+// interface for one datagram (UDP-28). The server's single socket serves every
+// client path, so a reply must be able to name the interface the request
+// arrived on — a plain sendto would let the routing table pick, which on a
+// multi-homed server can answer out of the wrong uplink.
+func buildPktinfo(ifIndex int) []byte {
+	pi := unix.Inet4Pktinfo{Ifindex: int32(ifIndex)}
+	const dataLen = int(unsafe.Sizeof(pi))
+	buf := make([]byte, unix.CmsgSpace(dataLen))
+	h := (*unix.Cmsghdr)(unsafe.Pointer(&buf[0]))
+	h.Level = unix.IPPROTO_IP
+	h.Type = unix.IP_PKTINFO
+	h.SetLen(unix.CmsgLen(dataLen))
+	copy(buf[unix.CmsgLen(0):], (*(*[dataLen]byte)(unsafe.Pointer(&pi)))[:])
+	return buf
+}

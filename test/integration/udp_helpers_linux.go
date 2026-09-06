@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -43,12 +44,28 @@ func startCapture(t testing.TB, ns, dev string, dstPort int) *capture {
 		t.Fatalf("start tcpdump on %s: %v", dev, err)
 	}
 	c := &capture{cmd: cmd, out: buf, dev: dev}
-	c.stop = func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }
+	var once sync.Once
+	c.stop = func() {
+		once.Do(func() {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait() // reap, so no zombie outlives the test
+		})
+	}
 	t.Cleanup(c.stop)
-	// tcpdump needs a moment to attach before traffic starts, or the capture
-	// silently misses the very packets it exists to observe.
-	time.Sleep(300 * time.Millisecond)
-	return c
+
+	// Wait for tcpdump to say it is listening rather than sleeping a guess: a
+	// capture that attaches late silently misses the packets it exists to
+	// observe, which would turn a real leak into a passing test.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(buf.String(), "listening on") {
+			return c
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	c.stop()
+	t.Fatalf("tcpdump on %s never reported it was listening:\n%s", dev, buf.String())
+	return nil
 }
 
 func (c *capture) count(t testing.TB) int {
@@ -71,8 +88,9 @@ func ipNS(ns string, args ...string) error { return ipIn(ns, args...) }
 
 // helperProc is a spawned helper whose output the test inspects on exit.
 type helperProc struct {
-	cmd *exec.Cmd
-	out *bytes.Buffer
+	cmd  *exec.Cmd
+	out  *bytes.Buffer
+	once sync.Once
 }
 
 // spawnHelper starts a helper mode in a namespace without waiting for it.
@@ -87,17 +105,34 @@ func (top *Topology) spawnHelper(t testing.TB, ns, mode, arg string) *helperProc
 	}
 	h := &helperProc{cmd: cmd, out: buf}
 	t.Cleanup(func() {
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
+		h.once.Do(func() {
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			_ = cmd.Wait() // reap; Kill alone leaves a zombie
+		})
 	})
-	// Give the helper time to bind before the sender starts.
-	time.Sleep(300 * time.Millisecond)
 	return h
 }
 
-// wait blocks for the helper and returns its combined output.
+// waitReadyLine blocks until the helper prints its "ready" line, so a sender
+// never transmits into a socket that has not been bound yet.
+func (h *helperProc) waitReadyLine(t testing.TB, within time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if strings.Contains(h.out.String(), "ready ") {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("helper never signalled readiness within %s:\n%s", within, h.out.String())
+}
+
+// wait blocks for the helper and returns its combined output. It is safe
+// alongside the cleanup reaper: whichever runs first performs the Wait.
 func (h *helperProc) wait() (string, error) {
-	err := h.cmd.Wait()
+	var err error
+	h.once.Do(func() { err = h.cmd.Wait() })
 	return h.out.String(), err
 }

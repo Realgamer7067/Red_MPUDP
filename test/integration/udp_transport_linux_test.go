@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestUDPPathsBindToTheirOwnInterface covers UDP-41..44 and the gate "interface
@@ -68,8 +69,17 @@ func TestUDPOversizeAndTruncation(t *testing.T) {
 	const port = 51821
 	sink := top.spawnHelper(t, nsFull(keyServer), "udp-sink",
 		fmt.Sprintf("%s:%d,1,64", pathAServer, port))
+	sink.waitReadyLine(t, 5*time.Second)
 
-	arg := fmt.Sprintf("pa0,%s,%s:%d,send+oversize", pathAClient, pathAServer, port)
+	// Two distinct properties, deliberately not conflated:
+	//
+	//   wire-oversize  sends a datagram the socket WILL transmit (below
+	//                  MaxDatagramSize) but that overflows the sink's 64-byte
+	//                  buffer, so the sink observes MSG_TRUNC. A payload above
+	//                  MaxDatagramSize could never prove this — it is rejected
+	//                  locally and never reaches the wire at all.
+	//   local-oversize checks the separate local rejection above MaxDatagramSize.
+	arg := fmt.Sprintf("pa0,%s,%s:%d,wire-oversize+local-oversize", pathAClient, pathAServer, port)
 	if out, err := helperCmd(nsFull(keyClient), "udp-path", arg).CombinedOutput(); err != nil {
 		t.Fatalf("udp-path: %v\n%s", err, out)
 	}
@@ -97,11 +107,21 @@ func TestUDPReducedPathMTUIsReported(t *testing.T) {
 		t.Fatalf("lower pa0 mtu: %v", err)
 	}
 
+	// A real sink must be listening. Without one, a port-unreachable ICMP would
+	// arrive and could be mistaken for PMTU feedback, so the test would pass for
+	// entirely the wrong reason.
 	const port = 51822
+	sink := top.spawnHelper(t, nsFull(keyServer), "udp-sink",
+		fmt.Sprintf("%s:%d,1,2048", pathAServer, port))
+	sink.waitReadyLine(t, 5*time.Second)
+
 	arg := fmt.Sprintf("pa0,%s,%s:%d,pmtu", pathAClient, pathAServer, port)
 	out, err := helperCmd(nsFull(keyClient), "udp-path", arg).CombinedOutput()
 	if err != nil {
 		t.Fatalf("a 1400-byte datagram over a 1280-MTU path was not reported: %v\n%s", err, out)
 	}
+	// The helper itself requires the event to quote this path's server and to
+	// carry a credible next-hop MTU (576 <= mtu < 1400), so a stray ICMP cannot
+	// satisfy it.
 	t.Logf("pmtu feedback: %s", out)
 }

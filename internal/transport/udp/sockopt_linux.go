@@ -3,7 +3,9 @@
 package udp
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 
 	"golang.org/x/sys/unix"
@@ -51,10 +53,37 @@ func localAddrPort(fd int) (netip.AddrPort, error) {
 
 // dupCloexec duplicates fd with close-on-exec set atomically. fcntl(F_DUPFD_CLOEXEC)
 // is used rather than dup3 because dup3 requires a specific target descriptor.
-func dupCloexec(fd int) (int, error) {
+var dupCloexec = func(fd int) (int, error) {
 	nfd, err := unix.FcntlInt(uintptr(fd), unix.F_DUPFD_CLOEXEC, 0)
 	if err != nil {
 		return -1, err
 	}
 	return nfd, nil
+}
+
+// pipe2 is a seam so a test can force the wakeup pipe to fail.
+var pipe2 = func(p []int) error { return unix.Pipe2(p, unix.O_CLOEXEC|unix.O_NONBLOCK) }
+
+// errFileOwned marks a newSocket failure that happened after the *os.File took
+// ownership of the descriptor, so the caller must not close it again.
+type errFileOwned struct{ err error }
+
+func (e errFileOwned) Error() string { return e.err.Error() }
+func (e errFileOwned) Unwrap() error { return e.err }
+
+// ErrBadIfIndex is returned when a caller names an interface index that is not
+// present on this host.
+var ErrBadIfIndex = errors.New("udp: unknown outbound interface index")
+
+// validateIfIndex rejects an index that names no interface, so a typo or a
+// stale ReceiveMeta fails loudly instead of silently falling back to whatever
+// the routing table would have chosen.
+func validateIfIndex(idx int) error {
+	if idx <= 0 {
+		return fmt.Errorf("%w: %d", ErrBadIfIndex, idx)
+	}
+	if _, err := net.InterfaceByIndex(idx); err != nil {
+		return fmt.Errorf("%w: %d: %w", ErrBadIfIndex, idx, err)
+	}
+	return nil
 }

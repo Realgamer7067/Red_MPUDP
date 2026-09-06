@@ -46,6 +46,9 @@ type MemoryStats struct {
 	Duplicated uint64
 	Reordered  uint64
 	Sent       uint64
+	// PathErrDropped counts injected path errors discarded because the bounded
+	// queue was full.
+	PathErrDropped uint64
 }
 
 // memoryEndpoint is one half of a pair.
@@ -110,9 +113,24 @@ func (c *MemoryConn) Stats() MemoryStats {
 	return c.ep.stats
 }
 
-// InjectPathError queues a PathError for ReadPathError to return.
+// MaxInjectedPathErrors bounds the injected path-error queue, mirroring the
+// real sockets: path feedback is advisory, so an unbounded backlog would be a
+// worse failure than dropping the oldest entry.
+const MaxInjectedPathErrors = 16
+
+// InjectPathError queues a PathError for ReadPathError to return. It never
+// blocks: at capacity the oldest entry is dropped, and after Close the event is
+// discarded outright.
 func (c *MemoryConn) InjectPathError(pe PathError) {
 	c.ep.mu.Lock()
+	if c.ep.closed {
+		c.ep.mu.Unlock()
+		return
+	}
+	if len(c.ep.pathErr) >= MaxInjectedPathErrors {
+		c.ep.pathErr = c.ep.pathErr[1:]
+		c.ep.stats.PathErrDropped++
+	}
 	c.ep.pathErr = append(c.ep.pathErr, pe)
 	c.ep.mu.Unlock()
 	c.ep.wake()
@@ -174,14 +192,15 @@ func (e *memoryEndpoint) push(d memoryDatagram) {
 }
 
 func (c *MemoryConn) WriteTo(ctx context.Context, pkt []byte, dst Endpoint) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
+	// ErrClosed outranks a cancelled context and an oversized payload alike.
 	c.ep.mu.Lock()
 	closed := c.ep.closed
 	c.ep.mu.Unlock()
 	if closed {
 		return ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if len(pkt) > c.ep.opts.MaxDatagram {
 		return ErrOversize
@@ -206,6 +225,15 @@ func (c *MemoryConn) WriteTo(ctx context.Context, pkt []byte, dst Endpoint) erro
 
 func (c *MemoryConn) ReadInto(ctx context.Context, dst []byte) (int, ReceiveMeta, error) {
 	e := c.ep
+	if err := ctx.Err(); err != nil {
+		e.mu.Lock()
+		closed := e.closed
+		e.mu.Unlock()
+		if closed {
+			return 0, ReceiveMeta{}, ErrClosed // ErrClosed outranks cancellation
+		}
+		return 0, ReceiveMeta{}, err
+	}
 	for {
 		e.mu.Lock()
 		if e.closed {
@@ -238,6 +266,15 @@ func (c *MemoryConn) ReadInto(ctx context.Context, dst []byte) (int, ReceiveMeta
 
 func (c *MemoryConn) ReadPathError(ctx context.Context) (PathError, error) {
 	e := c.ep
+	e.mu.Lock()
+	closed := e.closed
+	e.mu.Unlock()
+	if closed {
+		return PathError{}, ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return PathError{}, err
+	}
 	for {
 		e.mu.Lock()
 		if e.closed {

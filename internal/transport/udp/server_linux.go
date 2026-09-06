@@ -79,12 +79,17 @@ func Listen(cfg ServerConfig) (*Server, error) {
 		return fail("udp: getsockname: %w", err)
 	}
 
-	s, err := newSocket(fd, "udp:server", cfg.MaxDatagram, Diagnostics{
+	// No connected peer: the server socket serves every client, so its path
+	// errors must carry a quoted tuple to be attributable at all.
+	s, err := newSocket(fd, "udp:server", cfg.MaxDatagram, netip.AddrPort{}, Diagnostics{
 		LocalAddr: local,
 		Buffers:   bufs,
 	})
 	if err != nil {
-		unix.Close(fd)
+		var owned errFileOwned
+		if !errors.As(err, &owned) {
+			unix.Close(fd)
+		}
 		return nil, err
 	}
 	return &Server{socket: s}, nil
@@ -96,6 +101,9 @@ func (s *Server) LocalAddr() netip.AddrPort { return s.diag.LocalAddr }
 // ReadInto reads one datagram and records the source, the local destination
 // address and the receive ifindex from ancillary data (UDP-27, UDP-29..33).
 func (s *Server) ReadInto(ctx context.Context, dst []byte) (int, transport.ReceiveMeta, error) {
+	if s.isClosed() {
+		return 0, transport.ReceiveMeta{}, transport.ErrClosed
+	}
 	oob := make([]byte, 256)
 	return s.recvOne(ctx, dst, oob)
 }
@@ -104,15 +112,30 @@ func (s *Server) ReadInto(ctx context.Context, dst []byte) (int, transport.Recei
 // The session layer chooses that endpoint; this socket does not validate it
 // beyond requiring IPv4.
 func (s *Server) WriteTo(ctx context.Context, pkt []byte, dst transport.Endpoint) error {
+	if s.isClosed() {
+		return transport.ErrClosed
+	}
 	if !dst.AddrPort.IsValid() || !dst.AddrPort.Addr().Is4() {
 		return fmt.Errorf("udp: destination %s must be a valid IPv4 endpoint", dst.AddrPort)
 	}
 	if len(pkt) > s.maxDatagram {
 		return fmt.Errorf("%w: %d > %d", transport.ErrOversize, len(pkt), s.maxDatagram)
 	}
+	// UDP-28: honour a caller-selected outbound interface. The session layer
+	// knows which uplink a client's datagram arrived on (ReceiveMeta.IfIndex)
+	// and replies through the same one; leaving the choice to the routing table
+	// would answer out of the wrong interface on a multi-homed server.
+	var oob []byte
+	if dst.IfIndex != 0 {
+		if err := validateIfIndex(dst.IfIndex); err != nil {
+			return err
+		}
+		oob = buildPktinfo(dst.IfIndex)
+	}
+
 	sa := &unix.SockaddrInet4{Addr: dst.AddrPort.Addr().As4(), Port: int(dst.AddrPort.Port())}
 	err := s.doWrite(ctx, func(fd uintptr) (bool, error) {
-		e := unix.Sendto(int(fd), pkt, unix.MSG_DONTWAIT, sa)
+		e := unix.Sendmsg(int(fd), pkt, oob, sa, unix.MSG_DONTWAIT)
 		if e == unix.EAGAIN || e == unix.EWOULDBLOCK || e == unix.EINTR {
 			return false, nil
 		}
@@ -134,5 +157,5 @@ func (s *Server) WriteTo(ctx context.Context, pkt []byte, dst transport.Endpoint
 			return fmt.Errorf("%w: kernel refused %d bytes: %w", transport.ErrOversize, len(pkt), err)
 		}
 	}
-	return fmt.Errorf("udp: sendto: %w", err)
+	return fmt.Errorf("udp: sendmsg: %w", err)
 }

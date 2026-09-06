@@ -56,6 +56,12 @@ type socket struct {
 	maxDatagram int
 	diag        Diagnostics
 
+	// peer is the connected remote endpoint, or the zero value for the
+	// unconnected server socket. It is the only identity a normal-read errno
+	// can be attributed to, and the value an error-queue event must quote to be
+	// accepted (UDP-37).
+	peer netip.AddrPort
+
 	// pathErrs is the single source of truth for path errors. Both the
 	// error-queue goroutine and the synchronous send path publish here, so it
 	// does not matter which of them observes a given socket error first.
@@ -80,32 +86,42 @@ type socket struct {
 }
 
 // newSocket wraps an already-configured nonblocking fd.
-func newSocket(fd int, name string, maxDatagram int, diag Diagnostics) (*socket, error) {
-	f := os.NewFile(uintptr(fd), name)
-	rc, err := f.SyscallConn()
-	if err != nil {
-		f.Close()
-		return nil, fmt.Errorf("udp: raw conn: %w", err)
-	}
-	// Dup3 with O_CLOEXEC rather than Dup: a plain dup clears close-on-exec, so
-	// a fork between the two calls could leak the socket.
+//
+// Ownership: on success the returned socket owns fd and closes it in Close. On
+// failure fd is NOT closed and NOT wrapped — ownership stays with the caller,
+// which is still inside its own cleanup path and will close it exactly once.
+// Closing here as well would double-close a descriptor number the kernel may
+// already have handed to another goroutine.
+func newSocket(fd int, name string, maxDatagram int, peer netip.AddrPort, diag Diagnostics) (*socket, error) {
 	errFD, err := dupCloexec(fd)
 	if err != nil {
-		f.Close()
 		return nil, fmt.Errorf("udp: dup for the error queue: %w", err)
 	}
 	var pipe [2]int
-	if err := unix.Pipe2(pipe[:], unix.O_CLOEXEC|unix.O_NONBLOCK); err != nil {
+	if err := pipe2(pipe[:]); err != nil {
 		unix.Close(errFD)
-		f.Close()
 		return nil, fmt.Errorf("udp: error-queue wakeup pipe: %w", err)
 	}
 
+	// From here on the *os.File owns fd, so every later failure closes the file
+	// rather than the raw descriptor.
+	f := os.NewFile(uintptr(fd), name)
+	rc, err := f.SyscallConn()
+	if err != nil {
+		unix.Close(errFD)
+		unix.Close(pipe[0])
+		unix.Close(pipe[1])
+		f.Close()
+		return nil, fmt.Errorf("udp: raw conn: %w", errFileOwned{err})
+	}
+	// Dup3 with O_CLOEXEC rather than Dup: a plain dup clears close-on-exec, so
+	// a fork between the two calls could leak the socket.
 	s := &socket{
 		file:        f,
 		rc:          rc,
 		maxDatagram: maxDatagram,
 		diag:        diag,
+		peer:        peer,
 		pathErrs:    make(chan transport.PathError, pathErrDepth),
 		errFD:       errFD,
 		wakeR:       pipe[0],
@@ -132,8 +148,19 @@ func (s *socket) isClosed() bool {
 }
 
 // publishPathError enqueues without blocking, dropping the oldest entry when
-// the bounded queue is full.
+// the bounded queue is full. An event with no valid peer is discarded: a
+// PathError that cannot be attributed to an endpoint is worse than none, since
+// the PMTU logic would apply it to the wrong path (UDP-37).
 func (s *socket) publishPathError(pe transport.PathError) {
+	if !pe.Peer.IsValid() {
+		return
+	}
+	if s.peer.IsValid() && pe.Peer != s.peer {
+		return // not this path's error
+	}
+	if s.isClosed() {
+		return
+	}
 	for {
 		select {
 		case s.pathErrs <- pe:
@@ -150,6 +177,15 @@ func (s *socket) publishPathError(pe transport.PathError) {
 
 // ReadPathError implements transport.DatagramIO (UDP-34..37).
 func (s *socket) ReadPathError(ctx context.Context) (transport.PathError, error) {
+	// ErrClosed outranks a queued event and a cancelled context alike: once the
+	// socket is closed every method reports that, stably, whatever else is
+	// pending (UDP-40).
+	if s.isClosed() {
+		return transport.PathError{}, transport.ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return transport.PathError{}, err
+	}
 	select {
 	case pe := <-s.pathErrs:
 		return pe, nil
@@ -309,15 +345,24 @@ func (s *socket) recvOne(ctx context.Context, dst []byte, oob []byte) (int, tran
 
 // mapRecvErr turns a receive failure into a stable error. A pending socket
 // error consumed by the normal receive path (rather than by the error-queue
-// goroutine) is still published as a PathError, so ownership of the error does
-// not depend on which goroutine the kernel happened to wake.
+// goroutine) is still published as a PathError, so ownership does not depend on
+// which goroutine the kernel happened to wake.
+//
+// The event is attributed to the socket's connected peer. An unconnected server
+// socket has no peer to attribute a bare errno to — the errno alone does not say
+// which client it belongs to — so it publishes nothing and lets the error-queue
+// goroutine, which does get a quoted tuple, be the only source.
 func (s *socket) mapRecvErr(err error) error {
 	if errors.Is(err, transport.ErrClosed) || errors.Is(err, os.ErrClosed) {
 		return transport.ErrClosed
 	}
 	var errno unix.Errno
-	if errors.As(err, &errno) && isPathErrno(errno) {
-		s.publishPathError(transport.PathError{Local: true})
+	if errors.As(err, &errno) && isPathErrno(errno) && s.peer.IsValid() {
+		pe := transport.PathError{Peer: s.peer, Local: true}
+		if errno == unix.EMSGSIZE {
+			pe.MTU = 0 // a bare errno carries no next-hop MTU
+		}
+		s.publishPathError(pe)
 	}
 	return err
 }
@@ -365,6 +410,8 @@ func (s *socket) drainErrorQueue() {
 			if err != nil {
 				break
 			}
+			// publishPathError discards an event with no valid quoted peer, or
+			// one quoting an endpoint this socket is not connected to (UDP-37).
 			if pe, ok := parseErrorQueue(oob[:oobn], from); ok { // UDP-35, UDP-36
 				s.publishPathError(pe)
 			}

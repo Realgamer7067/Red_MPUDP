@@ -282,3 +282,60 @@ func TestMemoryContextCancelUnblocksRead(t *testing.T) {
 		t.Fatal("cancel did not unblock ReadInto")
 	}
 }
+
+// The injected path-error queue is bounded and never blocks: at capacity the
+// oldest event is dropped and counted, mirroring the real sockets.
+func TestMemoryInjectedPathErrorsAreBounded(t *testing.T) {
+	a, _ := pair(t, transport.MemoryOptions{}, transport.MemoryOptions{})
+
+	const over = transport.MaxInjectedPathErrors + 8
+	for i := 0; i < over; i++ {
+		a.InjectPathError(transport.PathError{MTU: 1000 + i})
+	}
+	if s := a.Stats(); s.PathErrDropped != over-transport.MaxInjectedPathErrors {
+		t.Fatalf("PathErrDropped = %d, want %d", s.PathErrDropped, over-transport.MaxInjectedPathErrors)
+	}
+	// The queue kept the newest entries, so the first one read is not the
+	// first one injected.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	pe, err := a.ReadPathError(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pe.MTU != 1000+(over-transport.MaxInjectedPathErrors) {
+		t.Fatalf("oldest surviving event MTU = %d, want %d",
+			pe.MTU, 1000+(over-transport.MaxInjectedPathErrors))
+	}
+}
+
+// After Close an injected event is discarded rather than queued, and every
+// method reports ErrClosed ahead of a cancelled context or an oversized write.
+func TestMemoryAfterCloseIsErrClosed(t *testing.T) {
+	a, _ := transport.NewMemoryPair(addrA, addrB,
+		transport.MemoryOptions{MaxDatagram: 32}, transport.MemoryOptions{})
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	a.InjectPathError(transport.PathError{MTU: 1200}) // must be discarded
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	checks := map[string]func() error{
+		"ReadInto":           func() error { _, _, err := a.ReadInto(context.Background(), make([]byte, 8)); return err },
+		"ReadInto cancelled": func() error { _, _, err := a.ReadInto(cancelled, make([]byte, 8)); return err },
+		"WriteTo":            func() error { return a.WriteTo(context.Background(), []byte("x"), transport.Endpoint{AddrPort: addrB}) },
+		"WriteTo oversized": func() error {
+			return a.WriteTo(context.Background(), make([]byte, 4096), transport.Endpoint{AddrPort: addrB})
+		},
+		"WriteTo cancelled":       func() error { return a.WriteTo(cancelled, []byte("x"), transport.Endpoint{AddrPort: addrB}) },
+		"ReadPathError":           func() error { _, err := a.ReadPathError(context.Background()); return err },
+		"ReadPathError cancelled": func() error { _, err := a.ReadPathError(cancelled); return err },
+	}
+	for name, fn := range checks {
+		if err := fn(); !errors.Is(err, transport.ErrClosed) {
+			t.Errorf("%s after Close = %v, want ErrClosed", name, err)
+		}
+	}
+}

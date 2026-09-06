@@ -89,7 +89,25 @@ func Dial(cfg ClientConfig) (*Client, error) {
 
 	if cfg.Interface != "" { // UDP-13
 		if err := unix.SetsockoptString(fd, unix.SOL_SOCKET, unix.SO_BINDTODEVICE, cfg.Interface); err != nil {
+			// ENODEV means the interface went away between the lookup above and
+			// this call.
+			if errors.Is(err, unix.ENODEV) || errors.Is(err, unix.ENXIO) {
+				return fail("%w: %s vanished before SO_BINDTODEVICE: %w", ErrInterfaceGone, cfg.Interface, err)
+			}
 			return fail("udp: SO_BINDTODEVICE %s: %w", cfg.Interface, err)
+		}
+		// UDP-10/UDP-11 race: the name was resolved to an ifindex before the
+		// socket existed. If the interface was deleted and recreated in that
+		// window, the name now refers to a different device with a different
+		// index, and the socket would be bound to a link this path never chose.
+		// Re-resolve and require the same index.
+		again, err := net.InterfaceByName(cfg.Interface)
+		if err != nil {
+			return fail("%w: %s disappeared during setup: %w", ErrInterfaceGone, cfg.Interface, err)
+		}
+		if again.Index != ifIndex {
+			return fail("%w: %s was recreated during setup (ifindex %d -> %d)",
+				ErrInterfaceGone, cfg.Interface, ifIndex, again.Index)
 		}
 	}
 	if cfg.FWMark != 0 { // UDP-14
@@ -105,6 +123,11 @@ func Dial(cfg ClientConfig) (*Client, error) {
 			return fail("udp: local address %s must be IPv4", cfg.LocalAddr)
 		}
 		if err := unix.Bind(fd, &unix.SockaddrInet4{Addr: cfg.LocalAddr.As4()}); err != nil {
+			// EADDRNOTAVAIL is what a bind to the address of an interface that
+			// has just gone away looks like.
+			if errors.Is(err, unix.EADDRNOTAVAIL) {
+				return fail("%w: source %s is no longer present: %w", ErrInterfaceGone, cfg.LocalAddr, err)
+			}
 			return fail("udp: bind %s: %w", cfg.LocalAddr, err)
 		}
 	}
@@ -114,6 +137,9 @@ func Dial(cfg ClientConfig) (*Client, error) {
 		Addr: cfg.Server.Addr().As4(),
 		Port: int(cfg.Server.Port()),
 	}); err != nil {
+		if errors.Is(err, unix.ENETUNREACH) || errors.Is(err, unix.EADDRNOTAVAIL) {
+			return fail("%w: no route to %s from %s: %w", ErrInterfaceGone, cfg.Server, cfg.Interface, err)
+		}
 		return fail("udp: connect %s: %w", cfg.Server, err)
 	}
 	// UDP-17: never fragment; an oversized send fails with EMSGSIZE instead
@@ -135,7 +161,7 @@ func Dial(cfg ClientConfig) (*Client, error) {
 		return fail("udp: getsockname: %w", err)
 	}
 
-	s, err := newSocket(fd, "udp:"+cfg.Interface, cfg.MaxDatagram, Diagnostics{
+	s, err := newSocket(fd, "udp:"+cfg.Interface, cfg.MaxDatagram, cfg.Server, Diagnostics{
 		LocalAddr: local,
 		IfIndex:   ifIndex,
 		IfName:    cfg.Interface,
@@ -143,7 +169,12 @@ func Dial(cfg ClientConfig) (*Client, error) {
 		Buffers:   bufs,
 	})
 	if err != nil {
-		unix.Close(fd)
+		// newSocket closes nothing it did not create; fd is still ours unless
+		// the *os.File already took it over.
+		var owned errFileOwned
+		if !errors.As(err, &owned) {
+			unix.Close(fd)
+		}
 		return nil, err
 	}
 	return &Client{socket: s, server: cfg.Server}, nil
@@ -155,6 +186,9 @@ func (c *Client) Server() netip.AddrPort { return c.server }
 // ReadInto reads one datagram (UDP-29..33). The socket is connected, so the
 // kernel already discarded anything from another source.
 func (c *Client) ReadInto(ctx context.Context, dst []byte) (int, transport.ReceiveMeta, error) {
+	if c.isClosed() {
+		return 0, transport.ReceiveMeta{}, transport.ErrClosed
+	}
 	oob := make([]byte, 256)
 	n, meta, err := c.recvOne(ctx, dst, oob)
 	if err == nil && !meta.Source.IsValid() {
@@ -170,6 +204,11 @@ func (c *Client) ReadInto(ctx context.Context, dst []byte) (int, transport.Recei
 // retried at a smaller size — only authenticated probe results move the PMTU
 // (design §10, UDP-38).
 func (c *Client) WriteTo(ctx context.Context, pkt []byte, dst transport.Endpoint) error {
+	// A closed socket reports ErrClosed before any argument complaint, so a
+	// caller shutting down never has to distinguish "bad request" from "gone".
+	if c.isClosed() {
+		return transport.ErrClosed
+	}
 	if dst.AddrPort.IsValid() && dst.AddrPort != c.server {
 		return fmt.Errorf("udp: path socket is connected to %s, refusing a send to %s", c.server, dst.AddrPort)
 	}

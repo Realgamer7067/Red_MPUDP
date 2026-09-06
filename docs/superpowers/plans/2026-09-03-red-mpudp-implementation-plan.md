@@ -944,15 +944,32 @@ Landed:
   to inherit it (UDP-12), applies `SO_BINDTODEVICE` and `SO_MARK`, binds the
   source address, connects to the literal server, sets `IP_PMTUDISC_DO` and
   `IP_RECVERR`, sizes the buffers and reads back what the kernel granted
-  (UDP-13..21). `Listen` binds the shared server socket with `IP_PKTINFO`,
+  (UDP-13..21). The ifindex is **re-resolved after `SO_BINDTODEVICE`** and must
+  match: if the interface were deleted and recreated in that window the name
+  would refer to a different device, and the socket would be bound to a link
+  this path never chose. Disappearance, recreation, and the bind and connect
+  errors that follow one (`ENODEV`, `EADDRNOTAVAIL`, `ENETUNREACH`) all map to
+  `ErrInterfaceGone` (UDP-10, UDP-11). `Listen` binds the shared server socket with `IP_PKTINFO`,
   `IP_RECVERR` and `IP_PMTUDISC_DO` (UDP-22..26) and recovers the local
   destination address and receive ifindex per datagram (UDP-27), since one
-  socket serves every path.
+  socket serves every path. `Server.WriteTo` sends with `sendmsg` carrying an
+  outbound `IP_PKTINFO`, so a reply leaves by the interface the caller selected
+  from `ReceiveMeta.IfIndex` rather than by whatever the routing table would
+  pick — which on a multi-homed server would answer out of the wrong uplink. An
+  index naming no interface is rejected with `ErrBadIfIndex` instead of silently
+  falling back (UDP-28, `TestServerReplyHonoursSelectedInterface`).
 - Receive uses `recvmsg` with `MSG_TRUNC` in the flags, so the kernel reports
   the datagram's true length even when it did not fit. That length and the
-  returned `MSG_TRUNC` bit both mean truncation: the datagram is dropped whole,
-  `n` is 0, and the caller's buffer is left untouched, so nothing truncated can
-  reach a parser (UDP-29..33).
+  returned `MSG_TRUNC` bit both mean truncation: the datagram is dropped whole
+  and `n` is 0 (UDP-29..33).
+
+  On a truncated read the caller's buffer is **not** left untouched — an earlier
+  revision of this document and its test claimed otherwise. The kernel copies as
+  much of the datagram as fits before reporting the length that did not, so the
+  buffer holds a prefix of a dropped datagram. `n=0` plus `ErrTruncated` is the
+  entire contract; the bytes are unspecified and must never be parsed. The
+  interface says so, and `TestTruncatedReadLeavesBufferContentsUnspecified`
+  records the real behaviour rather than an aspiration.
 - A configured `SO_MARK` the kernel refuses is fatal rather than tolerated. A
   socket that silently lost its mark would egress through the wrong routing
   table and could recurse through `red0` (design §11.1), so `Dial` fails instead
@@ -978,6 +995,18 @@ Error-queue handling (UDP-34..37), and the one design decision worth recording:
   why `ReadPathError` cannot hang when the other one won the race
   (`TestPathErrorReachesReaderRegardlessOfRace`, which runs a competing reader
   and is unprivileged).
+- **Every published event must name a peer.** The socket retains its connected
+  endpoint; a normal-read errno is attributed to it, and an error-queue event
+  must quote it. An event with no valid peer, or one quoting a different
+  endpoint, is discarded — an unattributable `PathError` is worse than none,
+  because the PMTU logic would apply it to the wrong path (UDP-37). The
+  unconnected server socket has no peer to attribute a bare errno to, so it
+  publishes nothing from the normal-read path and relies on the quoted tuple.
+  The first version of this milestone published a peerless event from the
+  normal-read path, which made the race test fail 7 runs in 10; it now passes 15
+  plain, 10 `-tags debug` and 10 `-race` repeats. The test asserts the peer and
+  deliberately does not assert which goroutine won, since that is scheduling,
+  not behaviour.
 - Only kernel binary structures are parsed — `sock_extended_err` and the
   offender sockaddr the kernel appends — never any attacker-controlled string.
   A next-hop MTU is read only for ICMP fragmentation-needed or a local
@@ -986,6 +1015,18 @@ Error-queue handling (UDP-34..37), and the one design decision worth recording:
 - A synchronous `EMSGSIZE` surfaces as `ErrOversize` and the datagram is never
   retried smaller — only authenticated probe results move the PMTU
   (design §10, UDP-38).
+- **Descriptor ownership is explicit.** `newSocket` closes nothing it did not
+  create: on failure the caller still owns the socket fd and closes it exactly
+  once. Both post-construction failure points (the error-queue `dup` and the
+  wakeup pipe) are injected in `TestNewSocketDoesNotDoubleCloseOnInitFailure`,
+  which asserts the caller's own close succeeds, a second close returns `EBADF`,
+  and the descriptor count returns to its starting value — a double close would
+  otherwise release a number the kernel may already have reissued.
+- **`ErrClosed` outranks everything.** After `Close`, every method reports it
+  ahead of an invalid destination, an oversized payload, a cancelled context or
+  a queued path error, so a caller shutting down never has to tell "bad request"
+  apart from "gone" (`TestAfterCloseEverythingIsErrClosed`, and
+  `TestMemoryAfterCloseIsErrClosed` for the in-memory transport).
 - `Close` is `sync.Once`: it wakes the error-queue poller through a pipe, waits
   for that goroutine, then closes the descriptors it was using, so nothing is
   torn down under an in-flight operation. Context cancellation reuses the M06
@@ -1008,11 +1049,29 @@ Blocked on a privileged run (root + `ip`/`tcpdump`):
 - **UDP-41..46** and the "interface binding and marking" gate.
   `TestUDPPathsBindToTheirOwnInterface` (UDP-41..44) captures on both client
   uplinks while exactly one path sends, so it asserts presence on the intended
-  interface *and* absence on the other. `TestUDPOversizeAndTruncation` (UDP-45)
-  and `TestUDPReducedPathMTUIsReported` (UDP-46) drive the `udp-path` and
-  `udp-sink` helper modes across the two-namespace topology; the MTU test lowers
-  `pa0` to 1280 and requires either `EMSGSIZE` or an error-queue event for a
-  1400-byte datagram. All four skip accurately without CAP_NET_ADMIN, and
+  interface *and* absence on the other; it waits for tcpdump's "listening on"
+  line rather than sleeping, since a capture that attaches late would turn a
+  real leak into a passing test.
+
+  `TestUDPOversizeAndTruncation` (UDP-45) separates two properties an earlier
+  revision wrongly conflated. Proving `MSG_TRUNC` needs a datagram the socket
+  will actually transmit — above `MaxDatagramSize` it is rejected locally and
+  never reaches the wire, so the original test could not have demonstrated
+  truncation at all. It now sends `MaxDatagramSize-100` bytes to a 64-byte sink
+  for the wire-truncation half, and checks the local rejection above
+  `MaxDatagramSize` separately.
+
+  `TestUDPReducedPathMTUIsReported` (UDP-46) lowers `pa0` to 1280 and requires
+  either a synchronous `EMSGSIZE` or an error-queue event for a 1400-byte
+  datagram. It now runs a real sink: without one a port-unreachable ICMP arrives
+  and would pass as PMTU feedback, so the earlier version could have succeeded
+  for entirely the wrong reason. The helper additionally requires the event to
+  quote this path's server and to carry a credible next-hop MTU
+  (576 <= mtu < 1400), so a stray ICMP cannot satisfy it.
+
+  Helper processes signal readiness explicitly (the sink prints a `ready` line)
+  instead of the tests sleeping a guess, and every spawned process is killed and
+  reaped with `Wait`. All four skip accurately without CAP_NET_ADMIN, and
   `TestUDPPathsBindToTheirOwnInterface` additionally skips when `tcpdump` is
   absent. Run `sudo -E env "PATH=$PATH" make test-integration` and check them
   off once green.
