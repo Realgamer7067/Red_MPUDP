@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -63,6 +65,10 @@ var dupCloexec = func(fd int) (int, error) {
 
 // pipe2 is a seam so a test can force the wakeup pipe to fail.
 var pipe2 = func(p []int) error { return unix.Pipe2(p, unix.O_CLOEXEC|unix.O_NONBLOCK) }
+
+// syscallConn is a seam so a test can force the one newSocket failure that
+// happens after the *os.File has taken ownership of the descriptor.
+var syscallConn = func(f *os.File) (syscall.RawConn, error) { return f.SyscallConn() }
 
 // errFileOwned marks a newSocket failure that happened after the *os.File took
 // ownership of the descriptor, so the caller must not close it again.

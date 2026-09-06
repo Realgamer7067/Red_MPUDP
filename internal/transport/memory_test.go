@@ -317,7 +317,7 @@ func TestMemoryAfterCloseIsErrClosed(t *testing.T) {
 	if err := a.Close(); err != nil {
 		t.Fatal(err)
 	}
-	a.InjectPathError(transport.PathError{MTU: 1200}) // must be discarded
+	a.InjectPathError(transport.PathError{MTU: 1200}) // post-close: discarded
 
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -337,5 +337,31 @@ func TestMemoryAfterCloseIsErrClosed(t *testing.T) {
 		if err := fn(); !errors.Is(err, transport.ErrClosed) {
 			t.Errorf("%s after Close = %v, want ErrClosed", name, err)
 		}
+	}
+}
+
+// Companion to TestMemoryAfterCloseIsErrClosed: that test injects only after
+// Close, so it never exercises a non-empty queue. Queue an event first, confirm
+// it is really there, then close and require ErrClosed rather than the pending
+// event.
+func TestMemoryErrClosedOutranksAQueuedPathError(t *testing.T) {
+	a, _ := transport.NewMemoryPair(addrA, addrB, transport.MemoryOptions{}, transport.MemoryOptions{})
+
+	// The event is genuinely queued: while open, it reads back.
+	a.InjectPathError(transport.PathError{Peer: addrB, MTU: 1300})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	pe, err := a.ReadPathError(ctx)
+	cancel()
+	if err != nil || pe.MTU != 1300 {
+		t.Fatalf("open conn ReadPathError = (%+v, %v)", pe, err)
+	}
+
+	// Re-queue, then close with it still pending.
+	a.InjectPathError(transport.PathError{Peer: addrB, MTU: 1300})
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.ReadPathError(context.Background()); !errors.Is(err, transport.ErrClosed) {
+		t.Fatalf("ReadPathError with an event still queued = %v, want ErrClosed", err)
 	}
 }

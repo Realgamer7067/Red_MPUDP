@@ -1046,6 +1046,28 @@ Recorded as a baseline, not as a threshold anything asserts:
 
 Blocked on a privileged run (root + `ip`/`tcpdump`):
 
+> **The whole `test/integration` tree is compile-only in the development
+> environment.** It is uid 1000 with no CAP_NET_ADMIN and no `tcpdump`
+> installed, so everything behind the `integration` build tag has been vetted,
+> type-checked and compiled (including under `-race`) but **never executed**.
+> `go test ./...` and `go test -race ./...` do not even compile that tag.
+>
+> That is precisely why the UDP-45 and UDP-46 defects survived the green test
+> matrix of the previous revision: no amount of unprivileged repetition can
+> exercise code that never runs. Treat every claim about UDP-41..46, the
+> netns topology, `SO_MARK` taking effect, and the tcpdump captures as static
+> inspection, not verification. The corrected versions are stronger by
+> construction and are still unproven.
+>
+> Re-verification needs, on a host with `ip`/`tc`/`nft`/`tcpdump`:
+> `sudo -E env "PATH=$PATH" /usr/bin/go test -race -tags integration ./test/...`
+>
+> The skip guards themselves were reviewed and are sound: `skipUnlessPrivileged`
+> uses a real `t.Skipf` gated on effective CAP_NET_ADMIN via `Capget` plus
+> `ip`/`tc`/`nft` on PATH, so a missing capability skips rather than passing
+> vacuously, and `requireBinary(t, "tcpdump")` sits in the only test that
+> captures.
+
 - **UDP-41..46** and the "interface binding and marking" gate.
   `TestUDPPathsBindToTheirOwnInterface` (UDP-41..44) captures on both client
   uplinks while exactly one path sends, so it asserts presence on the intended

@@ -106,7 +106,7 @@ func newSocket(fd int, name string, maxDatagram int, peer netip.AddrPort, diag D
 	// From here on the *os.File owns fd, so every later failure closes the file
 	// rather than the raw descriptor.
 	f := os.NewFile(uintptr(fd), name)
-	rc, err := f.SyscallConn()
+	rc, err := syscallConn(f)
 	if err != nil {
 		unix.Close(errFD)
 		unix.Close(pipe[0])
