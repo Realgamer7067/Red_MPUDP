@@ -70,7 +70,10 @@ type Config struct {
 	// the live MTU": the ceiling follows every authenticated SetMTU change, so a
 	// raised MTU does not turn valid packets into RxOversize drops. A non-zero
 	// value is a hard ceiling instead — it never moves, and SetMTU refuses any
-	// MTU above it with ErrMTUAboveMaxPacket. It must therefore be >= MTU.
+	// MTU above it with ErrMTUAboveMaxPacket. It must therefore lie in
+	// [MTU, MaxMTU]: below MTU it would drop packets the kernel legally
+	// delivers, and above MaxMTU it would demand read buffers larger than the
+	// static ceiling the rest of the API is specified against.
 	//
 	// Either way a packet larger than the ceiling is dropped and counted
 	// (RxOversize), never returned truncated.
@@ -101,6 +104,13 @@ func (c Config) validate() error {
 	// MTU-sized packets that ReadPacket is required to drop.
 	if c.MaxPacket > 0 && c.MaxPacket < c.MTU {
 		return fmt.Errorf("tun: MaxPacket %d is below MTU %d", c.MaxPacket, c.MTU)
+	}
+	// A ceiling above MaxMTU would break the contract that a buffer sized
+	// against the static MaxMTU always satisfies ReadPacket: the kernel can
+	// never deliver more than MaxMTU here, so a larger ceiling buys nothing and
+	// would reject standard pooled buffers with ErrBufferTooSmall.
+	if c.MaxPacket > MaxMTU {
+		return fmt.Errorf("%w: MaxPacket %d exceeds MaxMTU %d", ErrMTURange, c.MaxPacket, MaxMTU)
 	}
 	return nil
 }

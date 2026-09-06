@@ -678,7 +678,11 @@ Read and write complete IPv4 packets through a safely owned TUN interface.
   directions, so an authenticated increase does not leave valid packets being
   dropped as oversize — `TestLinuxDefaultMaxPacketTracksAuthenticatedMTUIncrease`.
   An explicit `MaxPacket` is instead a fixed ceiling the MTU may not exceed
-  (`ErrMTUAboveMaxPacket`) — `TestLinuxExplicitMaxPacketIsAHardCeiling`.
+  (`ErrMTUAboveMaxPacket`) — `TestLinuxExplicitMaxPacketIsAHardCeiling` — and
+  `validate` confines it to `[MTU, MaxMTU]`, which is what makes the
+  "size read buffers against the static `MaxMTU`" contract true: a ceiling above
+  `MaxMTU` would buy nothing (the kernel cannot deliver more) while rejecting
+  standard pooled buffers with `ErrBufferTooSmall`.
 - [x] **TUN-17:** Reject an attempted live increase unless the session has an
   authenticated committed value. The check and the netlink mutation share one
   device mutex, so concurrent callers authorize against the value the previous
@@ -774,7 +778,13 @@ Landed:
   Read buffers must be sized against the static `MaxMTU`, never the current MTU:
   a default read ceiling tracks the MTU, so a buffer sized `DefaultMTU+64` would
   start returning `ErrBufferTooSmall` after an authenticated increase. Documented
-  on `Device.ReadPacket`, `Config.MaxPacket` and `ReadInto`.
+  on `Device.ReadPacket`, `Config.MaxPacket` and `ReadInto`. The contract holds
+  in both directions because `validate` bounds `MaxPacket` to `[MTU, MaxMTU]`,
+  so no configuration can demand a read buffer larger than `MaxMTU`
+  (`TestValidateConfig`, and `TestConfigValidationRunsBeforeOpen` which asserts
+  `Open` surfaces `ErrMTURange` rather than merely failing — the rows carrying a
+  sentinel now check its identity, so they stay meaningful on an unprivileged
+  host where `Open` would fail at `TUNSETIFF` regardless).
 - Integration (`test/integration`, `integration` tag): `tun-plaintext` helper
   mode opens `red0` inside a namespace, asserts MTU 1180, and moves a real
   cleartext IPv4/UDP packet from the kernel through a TUN reader to an

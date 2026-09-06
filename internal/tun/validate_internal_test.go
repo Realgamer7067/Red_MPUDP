@@ -36,11 +36,14 @@ func TestValidateConfig(t *testing.T) {
 	if err := c.validate(); err != nil {
 		t.Fatalf("zero MaxPacket rejected: %v", err)
 	}
-	// An explicit ceiling at or above the MTU is valid.
-	c = validBase()
-	c.MaxPacket = MaxMTU
-	if err := c.validate(); err != nil {
-		t.Fatalf("explicit MaxPacket >= MTU rejected: %v", err)
+	// An explicit ceiling anywhere in [MTU, MaxMTU] is valid; MaxMTU itself is
+	// the largest one the read-buffer contract can honour.
+	for _, mp := range []int{DefaultMTU, DefaultMTU + 1, MaxMTU} {
+		c = validBase()
+		c.MaxPacket = mp
+		if err := c.validate(); err != nil {
+			t.Fatalf("explicit MaxPacket %d rejected: %v", mp, err)
+		}
 	}
 
 	bad := []struct {
@@ -64,6 +67,10 @@ func TestValidateConfig(t *testing.T) {
 		// A ceiling below the MTU would make the kernel deliver packets
 		// ReadPacket is obliged to drop.
 		{"MaxPacket below MTU", func(c *Config) { c.MaxPacket = DefaultMTU - 1 }, nil},
+		// Above MaxMTU the ceiling would demand read buffers larger than the
+		// static MaxMTU the API's buffer-sizing contract is written against,
+		// so standard pooled buffers would fail with ErrBufferTooSmall.
+		{"MaxPacket above MaxMTU", func(c *Config) { c.MaxPacket = MaxMTU + 1 }, ErrMTURange},
 	}
 	for _, tc := range bad {
 		t.Run(tc.name, func(t *testing.T) {

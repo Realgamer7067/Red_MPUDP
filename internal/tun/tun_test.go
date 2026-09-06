@@ -25,24 +25,34 @@ func TestConfigValidationRunsBeforeOpen(t *testing.T) {
 	tests := []struct {
 		name string
 		mut  func(*tun.Config)
+		// want, when set, is the sentinel Open must surface. Asserting the
+		// identity — not merely "some error" — is what keeps these rows
+		// meaningful on an unprivileged host, where Open would fail at
+		// TUNSETIFF for lack of CAP_NET_ADMIN whatever the config held.
+		want error
 	}{
-		{"name too long", func(c *tun.Config) { c.Name = "an-interface-name-way-too-long" }},
-		{"name with slash", func(c *tun.Config) { c.Name = "red/0" }},
-		{"name with space", func(c *tun.Config) { c.Name = "red 0" }},
-		{"name with colon", func(c *tun.Config) { c.Name = "red:0" }},
-		{"mtu too low", func(c *tun.Config) { c.MTU = tun.MinMTU - 1 }},
-		{"mtu too high", func(c *tun.Config) { c.MTU = tun.MaxMTU + 1 }},
-		{"no address", func(c *tun.Config) { c.Address = netip.Prefix{} }},
-		{"ipv6 address", func(c *tun.Config) { c.Address = netip.MustParsePrefix("fd00::1/64") }},
-		{"negative maxpacket", func(c *tun.Config) { c.MaxPacket = -1 }},
-		{"maxpacket below mtu", func(c *tun.Config) { c.MaxPacket = tun.DefaultMTU - 1 }},
+		{"name too long", func(c *tun.Config) { c.Name = "an-interface-name-way-too-long" }, nil},
+		{"name with slash", func(c *tun.Config) { c.Name = "red/0" }, nil},
+		{"name with space", func(c *tun.Config) { c.Name = "red 0" }, nil},
+		{"name with colon", func(c *tun.Config) { c.Name = "red:0" }, nil},
+		{"mtu too low", func(c *tun.Config) { c.MTU = tun.MinMTU - 1 }, tun.ErrMTURange},
+		{"mtu too high", func(c *tun.Config) { c.MTU = tun.MaxMTU + 1 }, tun.ErrMTURange},
+		{"no address", func(c *tun.Config) { c.Address = netip.Prefix{} }, nil},
+		{"ipv6 address", func(c *tun.Config) { c.Address = netip.MustParsePrefix("fd00::1/64") }, nil},
+		{"negative maxpacket", func(c *tun.Config) { c.MaxPacket = -1 }, nil},
+		{"maxpacket below mtu", func(c *tun.Config) { c.MaxPacket = tun.DefaultMTU - 1 }, nil},
+		{"maxpacket above maxmtu", func(c *tun.Config) { c.MaxPacket = tun.MaxMTU + 1 }, tun.ErrMTURange},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			c := baseConfig()
 			tc.mut(&c)
-			if _, err := tun.Open(c); err == nil {
+			_, err := tun.Open(c)
+			if err == nil {
 				t.Fatalf("invalid config accepted by Open")
+			}
+			if tc.want != nil && !errors.Is(err, tc.want) {
+				t.Fatalf("Open err = %v, want %v — validation did not run before the descriptor", err, tc.want)
 			}
 		})
 	}
