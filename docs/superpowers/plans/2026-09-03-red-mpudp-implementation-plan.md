@@ -339,47 +339,47 @@ unbounded memory.
 
 ### Clock
 
-- [ ] **BASE-01:** Create `internal/clock/clock.go` with `Now`, timer, and ticker
+- [x] **BASE-01:** Create `internal/clock/clock.go` with `Now`, timer, and ticker
   abstractions backed by monotonic time.
-- [ ] **BASE-02:** Create `internal/testclock/clock.go`.
-- [ ] **BASE-03:** Add deterministic timer advancement.
-- [ ] **BASE-04:** Add deterministic ticker advancement.
-- [ ] **BASE-05:** Define ordering for timers firing at the same instant.
-- [ ] **BASE-06:** Test timer cancellation.
-- [ ] **BASE-07:** Test ticker stop.
-- [ ] **BASE-08:** Test that callbacks cannot run while the fake clock lock is
+- [x] **BASE-02:** Create `internal/testclock/clock.go`.
+- [x] **BASE-03:** Add deterministic timer advancement.
+- [x] **BASE-04:** Add deterministic ticker advancement.
+- [x] **BASE-05:** Define ordering for timers firing at the same instant.
+- [x] **BASE-06:** Test timer cancellation.
+- [x] **BASE-07:** Test ticker stop.
+- [x] **BASE-08:** Test that callbacks cannot run while the fake clock lock is
   held.
 
 ### Bounded data structures
 
-- [ ] **BASE-09:** Create a generic fixed-capacity ring under
+- [x] **BASE-09:** Create a generic fixed-capacity ring under
   `internal/bounded/`.
-- [ ] **BASE-10:** Test empty-ring behavior.
-- [ ] **BASE-11:** Test full-ring behavior.
-- [ ] **BASE-12:** Test wraparound behavior.
-- [ ] **BASE-13:** Add a bounded byte-counted queue primitive.
-- [ ] **BASE-14:** Reject an item larger than the byte limit.
-- [ ] **BASE-15:** Reject an item when the packet limit is reached.
-- [ ] **BASE-16:** Track queue insertion monotonic time.
-- [ ] **BASE-17:** Test exact byte accounting on enqueue/dequeue/drop.
+- [x] **BASE-10:** Test empty-ring behavior.
+- [x] **BASE-11:** Test full-ring behavior.
+- [x] **BASE-12:** Test wraparound behavior.
+- [x] **BASE-13:** Add a bounded byte-counted queue primitive.
+- [x] **BASE-14:** Reject an item larger than the byte limit.
+- [x] **BASE-15:** Reject an item when the packet limit is reached.
+- [x] **BASE-16:** Track queue insertion monotonic time.
+- [x] **BASE-17:** Test exact byte accounting on enqueue/dequeue/drop.
 
 ### Buffers and errors
 
-- [ ] **BASE-18:** Create `internal/packetbuf/pool.go` with fixed size classes
+- [x] **BASE-18:** Create `internal/packetbuf/pool.go` with fixed size classes
   sufficient for the maximum v1 datagram.
-- [ ] **BASE-19:** Define one-owner transfer semantics in package documentation.
-- [ ] **BASE-20:** Add debug-only double-release detection.
-- [ ] **BASE-21:** Test release on every modeled error path.
-- [ ] **BASE-22:** Create stable bounded reason-code enums for drops, handshake
+- [x] **BASE-19:** Define one-owner transfer semantics in package documentation.
+- [x] **BASE-20:** Add debug-only double-release detection.
+- [x] **BASE-21:** Test release on every modeled error path.
+- [x] **BASE-22:** Create stable bounded reason-code enums for drops, handshake
   failures, closes, and health transitions.
-- [ ] **BASE-23:** Test that reason codes have stable string forms.
-- [ ] **BASE-24:** Prohibit attacker-controlled text from becoming a reason-code
+- [x] **BASE-23:** Test that reason codes have stable string forms.
+- [x] **BASE-24:** Prohibit attacker-controlled text from becoming a reason-code
   value.
 
 ### Gate
 
-- [ ] `go test -race` passes for all foundation packages.
-- [ ] Queue and ring tests use no wall-clock sleeps.
+- [x] `go test -race` passes for all foundation packages.
+- [x] Queue and ring tests use no wall-clock sleeps.
 
 ### Checkpoint
 
@@ -395,98 +395,98 @@ Parse and validate all operator input before privileged or network activity.
 
 ### Configuration schema
 
-- [ ] **CONF-01:** Create `internal/config/client.go` with fields from the client
+- [x] **CONF-01:** Create `internal/config/client.go` with fields from the client
   YAML example.
-- [ ] **CONF-02:** Create `internal/config/server.go` with fields from the server
+- [x] **CONF-02:** Create `internal/config/server.go` with fields from the server
   YAML example.
-- [ ] **CONF-03:** Represent durations with an explicit YAML duration type.
-- [ ] **CONF-04:** Represent marks and routing-table identifiers with bounded
+- [x] **CONF-03:** Represent durations with an explicit YAML duration type.
+- [x] **CONF-04:** Represent marks and routing-table identifiers with bounded
   integer types.
-- [ ] **CONF-05:** Represent all addresses with `netip` types after parsing.
-- [ ] **CONF-06:** Reject unknown YAML fields.
-- [ ] **CONF-07:** Reject duplicate YAML keys.
-- [ ] **CONF-08:** Reject a client server endpoint that is not a literal IPv4
+- [x] **CONF-05:** Represent all addresses with `netip` types after parsing.
+- [x] **CONF-06:** Reject unknown YAML fields.
+- [x] **CONF-07:** Reject duplicate YAML keys.
+- [x] **CONF-08:** Reject a client server endpoint that is not a literal IPv4
   address and port.
-- [ ] **CONF-09:** Reject unspecified, multicast, broadcast, and zero server
+- [x] **CONF-09:** Reject unspecified, multicast, broadcast, and zero server
   addresses.
-- [ ] **CONF-10:** Apply the documented client defaults.
-- [ ] **CONF-11:** Apply the documented server defaults.
-- [ ] **CONF-12:** Validate TUN MTU range 1112 through 1400.
-- [ ] **CONF-13:** Validate maximum paths range 1 through 4.
-- [ ] **CONF-14:** Validate dedup-window range 4096 through 1048576.
-- [ ] **CONF-15:** Require dedup-window size to be a power of two.
-- [ ] **CONF-16:** Validate probe interval range 100 ms through 5 seconds.
-- [ ] **CONF-17:** Validate positive pacing rates and min/initial/max ordering.
-- [ ] **CONF-18:** Validate queue packet and byte limits.
-- [ ] **CONF-19:** Validate interface names without truncation.
-- [ ] **CONF-20:** Reject duplicate interface names.
-- [ ] **CONF-21:** Reject duplicate firewall marks.
-- [ ] **CONF-22:** Reject duplicate route-table IDs.
-- [ ] **CONF-23:** Reject collision between the tunnel table and path tables.
-- [ ] **CONF-24:** Reject overlapping rule-priority ranges.
-- [ ] **CONF-25:** Reject an invalid TUN subnet or server address.
-- [ ] **CONF-26:** Reject peer tunnel addresses outside the configured subnet.
-- [ ] **CONF-27:** Reject duplicate peer tunnel addresses.
-- [ ] **CONF-28:** Reject duplicate peer names.
-- [ ] **CONF-29:** Reject metrics listeners outside loopback without explicit
+- [x] **CONF-10:** Apply the documented client defaults.
+- [x] **CONF-11:** Apply the documented server defaults.
+- [x] **CONF-12:** Validate TUN MTU range 1112 through 1400.
+- [x] **CONF-13:** Validate maximum paths range 1 through 4.
+- [x] **CONF-14:** Validate dedup-window range 4096 through 1048576.
+- [x] **CONF-15:** Require dedup-window size to be a power of two.
+- [x] **CONF-16:** Validate probe interval range 100 ms through 5 seconds.
+- [x] **CONF-17:** Validate positive pacing rates and min/initial/max ordering.
+- [x] **CONF-18:** Validate queue packet and byte limits.
+- [x] **CONF-19:** Validate interface names without truncation.
+- [x] **CONF-20:** Reject duplicate interface names.
+- [x] **CONF-21:** Reject duplicate firewall marks.
+- [x] **CONF-22:** Reject duplicate route-table IDs.
+- [x] **CONF-23:** Reject collision between the tunnel table and path tables.
+- [x] **CONF-24:** Reject overlapping rule-priority ranges.
+- [x] **CONF-25:** Reject an invalid TUN subnet or server address.
+- [x] **CONF-26:** Reject peer tunnel addresses outside the configured subnet.
+- [x] **CONF-27:** Reject duplicate peer tunnel addresses.
+- [x] **CONF-28:** Reject duplicate peer names.
+- [x] **CONF-29:** Reject metrics listeners outside loopback without explicit
   opt-in.
-- [ ] **CONF-30:** Test that validation has no network or filesystem mutation.
+- [x] **CONF-30:** Test that validation has no network or filesystem mutation.
 
 ### Key file handling
 
-- [ ] **ID-01:** Create `internal/identity/keyfile.go`.
-- [ ] **ID-02:** Decode unpadded RFC 4648 standard base64.
-- [ ] **ID-03:** Accept one optional trailing newline.
-- [ ] **ID-04:** Reject leading/trailing spaces.
-- [ ] **ID-05:** Reject padded base64.
-- [ ] **ID-06:** Reject decoded lengths other than 32 bytes.
-- [ ] **ID-07:** Reject group-readable private-key files.
-- [ ] **ID-08:** Reject world-readable private-key files.
-- [ ] **ID-09:** Reject group-readable PSK files.
-- [ ] **ID-10:** Reject world-readable PSK files.
-- [ ] **ID-11:** Permit public-key files to be world-readable.
-- [ ] **ID-12:** Ensure key parsing errors never contain key bytes.
+- [x] **ID-01:** Create `internal/identity/keyfile.go`.
+- [x] **ID-02:** Decode unpadded RFC 4648 standard base64.
+- [x] **ID-03:** Accept one optional trailing newline.
+- [x] **ID-04:** Reject leading/trailing spaces.
+- [x] **ID-05:** Reject padded base64.
+- [x] **ID-06:** Reject decoded lengths other than 32 bytes.
+- [x] **ID-07:** Reject group-readable private-key files.
+- [x] **ID-08:** Reject world-readable private-key files.
+- [x] **ID-09:** Reject group-readable PSK files.
+- [x] **ID-10:** Reject world-readable PSK files.
+- [x] **ID-11:** Permit public-key files to be world-readable.
+- [x] **ID-12:** Ensure key parsing errors never contain key bytes.
 
 ### Key generation and derivation
 
-- [ ] **ID-13:** Create cryptographically random X25519 private-key generation.
-- [ ] **ID-14:** Derive the matching X25519 public key.
-- [ ] **ID-15:** Create cryptographically random 32-byte PSK generation.
-- [ ] **ID-16:** Fail closed on random-source errors.
-- [ ] **ID-17:** Write new private material with mode 0600 using exclusive
+- [x] **ID-13:** Create cryptographically random X25519 private-key generation.
+- [x] **ID-14:** Derive the matching X25519 public key.
+- [x] **ID-15:** Create cryptographically random 32-byte PSK generation.
+- [x] **ID-16:** Fail closed on random-source errors.
+- [x] **ID-17:** Write new private material with mode 0600 using exclusive
   creation.
-- [ ] **ID-18:** Refuse to overwrite an existing key file.
-- [ ] **ID-19:** Derive `peer_id` from the first eight SHA-256 bytes in network
+- [x] **ID-18:** Refuse to overwrite an existing key file.
+- [x] **ID-19:** Derive `peer_id` from the first eight SHA-256 bytes in network
   byte order.
-- [ ] **ID-20:** Derive the HKDF salt from the protocol key-schedule string.
-- [ ] **ID-21:** Derive `preauth_key` with the specified HKDF info string.
-- [ ] **ID-22:** Derive `noise_psk` with the specified HKDF info string.
-- [ ] **ID-23:** Assert the two derived keys differ.
-- [ ] **ID-24:** Add deterministic peer-ID and HKDF golden vectors.
+- [x] **ID-20:** Derive the HKDF salt from the protocol key-schedule string.
+- [x] **ID-21:** Derive `preauth_key` with the specified HKDF info string.
+- [x] **ID-22:** Derive `noise_psk` with the specified HKDF info string.
+- [x] **ID-23:** Assert the two derived keys differ.
+- [x] **ID-24:** Add deterministic peer-ID and HKDF golden vectors.
 
 ### CLI
 
-- [ ] **CLI-01:** Add `keygen` subcommand.
-- [ ] **CLI-02:** Require an explicit output path for `keygen`.
-- [ ] **CLI-03:** Add `public-key` subcommand.
-- [ ] **CLI-04:** Add `psk` subcommand.
-- [ ] **CLI-05:** Add `check-config client` subcommand.
-- [ ] **CLI-06:** Add `check-config server` subcommand.
-- [ ] **CLI-07:** Ensure config-check commands perform no network mutation.
-- [ ] **CLI-08:** Add `client` subcommand argument parsing without starting the
+- [x] **CLI-01:** Add `keygen` subcommand.
+- [x] **CLI-02:** Require an explicit output path for `keygen`.
+- [x] **CLI-03:** Add `public-key` subcommand.
+- [x] **CLI-04:** Add `psk` subcommand.
+- [x] **CLI-05:** Add `check-config client` subcommand.
+- [x] **CLI-06:** Add `check-config server` subcommand.
+- [x] **CLI-07:** Ensure config-check commands perform no network mutation.
+- [x] **CLI-08:** Add `client` subcommand argument parsing without starting the
   data plane.
-- [ ] **CLI-09:** Add `server` subcommand argument parsing without starting the
+- [x] **CLI-09:** Add `server` subcommand argument parsing without starting the
   data plane.
-- [ ] **CLI-10:** Add stable nonzero exit codes for usage, configuration,
+- [x] **CLI-10:** Add stable nonzero exit codes for usage, configuration,
   permission, and runtime failures.
-- [ ] **CLI-11:** Test that secrets supplied directly as CLI flags are rejected.
-- [ ] **CLI-12:** Test that help output contains no sample secret value.
+- [x] **CLI-11:** Test that secrets supplied directly as CLI flags are rejected.
+- [x] **CLI-12:** Test that help output contains no sample secret value.
 
 ### Gate
 
-- [ ] Valid example client and server configs load deterministically.
-- [ ] Every invalid boundary has a focused table-driven test.
-- [ ] Config and identity tests pass under the race detector.
+- [x] Valid example client and server configs load deterministically.
+- [x] Every invalid boundary has a focused table-driven test.
+- [x] Config and identity tests pass under the race detector.
 
 ### Checkpoint
 
@@ -502,11 +502,11 @@ Create a deterministic, recoverable place to exercise privileged networking.
 
 ### Namespace harness
 
-- [ ] **HARNESS-01:** Create `test/integration/preflight_linux_test.go`.
-- [ ] **HARNESS-02:** Detect Linux before running privileged tests.
-- [ ] **HARNESS-03:** Detect effective `CAP_NET_ADMIN`.
-- [ ] **HARNESS-04:** Detect availability of `ip`, `tc`, and `nft` test tools.
-- [ ] **HARNESS-05:** Skip with one precise reason when prerequisites are absent.
+- [x] **HARNESS-01:** Create `test/integration/preflight_linux_test.go`.
+- [x] **HARNESS-02:** Detect Linux before running privileged tests.
+- [x] **HARNESS-03:** Detect effective `CAP_NET_ADMIN`.
+- [x] **HARNESS-04:** Detect availability of `ip`, `tc`, and `nft` test tools.
+- [x] **HARNESS-05:** Skip with one precise reason when prerequisites are absent.
 - [ ] **HARNESS-06:** Create unique namespace names per test process.
 - [ ] **HARNESS-07:** Create `client-ns`.
 - [ ] **HARNESS-08:** Create `server-ns`.
@@ -540,41 +540,100 @@ Create a deterministic, recoverable place to exercise privileged networking.
 
 ### Mutation journal
 
-- [ ] **JOURNAL-01:** Create `internal/journal/schema.go` with schema version,
+- [x] **JOURNAL-01:** Create `internal/journal/schema.go` with schema version,
   role, instance ID, and owned-resource records.
-- [ ] **JOURNAL-02:** Exclude all key, PSK, join-token, and packet fields from
+- [x] **JOURNAL-02:** Exclude all key, PSK, join-token, and packet fields from
   the journal schema.
-- [ ] **JOURNAL-03:** Create the runtime directory with restrictive ownership.
-- [ ] **JOURNAL-04:** Write journals to a temporary file in the same directory.
-- [ ] **JOURNAL-05:** Set journal mode 0600 before writing content.
-- [ ] **JOURNAL-06:** Fsync the temporary journal.
-- [ ] **JOURNAL-07:** Atomically rename the temporary journal into place.
-- [ ] **JOURNAL-08:** Fsync the containing directory.
-- [ ] **JOURNAL-09:** Reject unsupported journal schema versions.
-- [ ] **JOURNAL-10:** Reject malformed resource identifiers.
-- [ ] **JOURNAL-11:** Reject a role/instance mismatch during recovery.
-- [ ] **JOURNAL-12:** Record prior sysctl values before changing them.
-- [ ] **JOURNAL-13:** Record prior resolver state before changing it.
-- [ ] **JOURNAL-14:** Record exact owned route/rule/table identifiers.
-- [ ] **JOURNAL-15:** Restore a sysctl only when its current value still equals
+- [x] **JOURNAL-03:** Create the runtime directory with restrictive ownership.
+- [x] **JOURNAL-04:** Write journals to a temporary file in the same directory.
+- [x] **JOURNAL-05:** Set journal mode 0600 before writing content.
+- [x] **JOURNAL-06:** Fsync the temporary journal.
+- [x] **JOURNAL-07:** Atomically rename the temporary journal into place.
+- [x] **JOURNAL-08:** Fsync the containing directory.
+- [x] **JOURNAL-09:** Reject unsupported journal schema versions.
+- [x] **JOURNAL-10:** Reject malformed resource identifiers.
+- [x] **JOURNAL-11:** Reject a role/instance mismatch during recovery.
+- [x] **JOURNAL-12:** Record prior sysctl values before changing them.
+- [x] **JOURNAL-13:** Record prior resolver state before changing it.
+- [x] **JOURNAL-14:** Record exact owned route/rule/table identifiers.
+- [x] **JOURNAL-15:** Restore a sysctl only when its current value still equals
   the value installed by RED_MPUDP.
-- [ ] **JOURNAL-16:** Preserve operator-modified sysctls and report a conflict.
-- [ ] **JOURNAL-17:** Remove only routes and rules with exact journal ownership.
-- [ ] **JOURNAL-18:** Remove only the exact named nftables table owned by the
+- [x] **JOURNAL-16:** Preserve operator-modified sysctls and report a conflict.
+- [x] **JOURNAL-17:** Remove only routes and rules with exact journal ownership.
+- [x] **JOURNAL-18:** Remove only the exact named nftables table owned by the
   instance.
-- [ ] **JOURNAL-19:** Make recovery idempotent.
-- [ ] **JOURNAL-20:** Make a second recovery invocation a no-op success.
-- [ ] **JOURNAL-21:** Add `cleanup --state-file` CLI parsing.
-- [ ] **JOURNAL-22:** Refuse cleanup when the journal is missing.
-- [ ] **JOURNAL-23:** Refuse cleanup when the journal is malformed.
+- [x] **JOURNAL-19:** Make recovery idempotent.
+- [x] **JOURNAL-20:** Make a second recovery invocation a no-op success.
+- [x] **JOURNAL-21:** Add `cleanup --state-file` CLI parsing.
+- [x] **JOURNAL-22:** Refuse cleanup when the journal is missing.
+- [x] **JOURNAL-23:** Refuse cleanup when the journal is malformed.
 - [ ] **JOURNAL-24:** Test recovery entirely inside a namespace.
+
+### Status (2026-09-03, revised after code review)
+
+Landed:
+
+- The full harness (`test/integration/`): per-run (`runID`) namespace names
+  and run-scoped (`<=15`-byte) root-side veth names shared with re-exec
+  children, so concurrent runs never collide; three namespaces; both veth
+  paths + server uplink; deterministic subnets; namespace-local routes in
+  **both** directions (internet-ns has return routes to each path subnet);
+  `tc netem`
+  delay/loss/duplication/reorder/rate helpers; link / address / gateway
+  mutation; re-exec echo/DNS targets with readiness polling (no fixed sleep)
+  and per-target output captured, dumped on failure, then removed; `Close`
+  waits on and reaps target processes and best-effort removes both namespaces
+  and root-side veth ends, so a mid-setup failure leaks nothing;
+  run-scoped leak detection. HARNESS-01..05 (preflight detection + precise
+  skip) are verified in this environment; HARNESS-06..34 are implemented but
+  exercised only by the privileged tests, which **skip here** for lack of
+  `CAP_NET_ADMIN`.
+- The mutation journal (`internal/journal/`): schema + secret-free assertion;
+  atomic 0600 write (temp + fsync + rename + dir fsync); `Load` opened
+  `O_NOFOLLOW` and required to be a single-hard-link regular file, mode 0600
+  or tighter, owned by the caller or root, with no trailing data after the
+  JSON document — this file-integrity check is the independent guard that a
+  planted journal cannot direct recovery; `EnsureDir` rejects a symlinked or
+  wrong-owner directory; `checkOwner`; and a **phased** `Recover`:
+  phase 1 (routes, rules, resolver, sysctls with restore-only-if-unchanged /
+  preserve-and-report) → gate → phase 2a (owned route-table flush) → gate →
+  phase 2b (nftables kill switch, last). A failure in phase 1 **or** phase 2a
+  retains the kill switch fail-closed (`Report.KillSwitchRetained`). Per
+  design §11.5 resolver restore precedes rule/route/kill-switch removal, so a
+  resolver-restore failure — including a host whose resolver manager is not
+  implemented yet (`ErrResolverUnsupported`, LinuxHost until M20) — is a
+  phase-1 failure: `cleanup` exits non-zero, the kill switch stays in place,
+  and the operator is told to restore resolver config by hand and re-run.
+  `LinuxHost.DeleteRoute` matches on the recorded metric. All covered by unit
+  tests against a fake `Host`.
+  `red-mpudp cleanup --state-file <path> [--role client|server] [--instance <id>]`
+  keeps the design §11.5 invocation (`--state-file` alone); `--role` /
+  `--instance` are optional operator-supplied pins checked against the journal
+  before any mutation. It refuses a missing / malformed / trailing-data /
+  wrong-schema / role-mismatch / loose-permission journal (JOURNAL-21..23).
+- **JOURNAL-24** is implemented: `TestRecoverInNamespace` re-execs the test
+  binary inside client-ns, installs an owned and an unrelated route in one
+  table, runs `journal.Recover` with the real `LinuxHost`, and asserts only
+  the owned route is removed. It **skips here** for lack of `CAP_NET_ADMIN`.
+
+Blocked on a privileged run (root + `ip`/`tc`/`nft`):
+
+- **JOURNAL-24** and the three gate boxes below. Run
+  `sudo -E env "PATH=$PATH" make test-integration` (or the `integration.yml`
+  workflow) and check them off once green.
 
 ### Gate
 
 - [ ] The topology can be created, impaired, and destroyed repeatedly.
+  *(blocked: privileged run — `TestTopologyLifecycle`)*
 - [ ] A deliberately failed test leaves no namespace behind.
+  *(blocked: privileged run — `TestFailedTestLeavesNoNamespace` runs the
+  failing scenario as a subprocess and asserts nonzero exit + no run-scoped
+  namespace survives)*
 - [ ] Journal recovery never removes an unrelated route, rule, nftables table,
-  resolver setting, or sysctl change.
+  resolver setting, or sysctl change. *(unit-proven against a fake host in
+  `TestRecoverTouchesOnlyOwnedResources`; end-to-end confirmation blocked on a
+  privileged run — `TestRecoverInNamespace` / JOURNAL-24)*
 
 ### Checkpoint
 
@@ -590,41 +649,41 @@ Read and write complete IPv4 packets through a safely owned TUN interface.
 
 ### API and lifecycle
 
-- [ ] **TUN-01:** Create `internal/tun/tun.go` with a platform-neutral interface.
-- [ ] **TUN-02:** Add a non-Linux implementation returning a stable unsupported
+- [x] **TUN-01:** Create `internal/tun/tun.go` with a platform-neutral interface.
+- [x] **TUN-02:** Add a non-Linux implementation returning a stable unsupported
   error.
-- [ ] **TUN-03:** Create `internal/tun/tun_linux.go` with Linux build tags.
-- [ ] **TUN-04:** Open `/dev/net/tun` with close-on-exec behavior.
-- [ ] **TUN-05:** Request `IFF_TUN | IFF_NO_PI`.
-- [ ] **TUN-06:** Validate the requested interface name before ioctl.
-- [ ] **TUN-07:** Return the actual kernel-assigned name.
-- [ ] **TUN-08:** Ensure closing the object closes the file descriptor once.
-- [ ] **TUN-09:** Ensure a partial constructor failure closes the descriptor.
-- [ ] **TUN-10:** Keep the interface non-persistent in v1.
+- [x] **TUN-03:** Create `internal/tun/tun_linux.go` with Linux build tags.
+- [x] **TUN-04:** Open `/dev/net/tun` with close-on-exec behavior.
+- [x] **TUN-05:** Request `IFF_TUN | IFF_NO_PI`.
+- [x] **TUN-06:** Validate the requested interface name before ioctl.
+- [x] **TUN-07:** Return the actual kernel-assigned name.
+- [x] **TUN-08:** Ensure closing the object closes the file descriptor once.
+- [x] **TUN-09:** Ensure a partial constructor failure closes the descriptor.
+- [x] **TUN-10:** Keep the interface non-persistent in v1.
 
 ### Configuration
 
-- [ ] **TUN-11:** Set the configured IPv4 address using structured netlink
+- [x] **TUN-11:** Set the configured IPv4 address using structured netlink
   values.
-- [ ] **TUN-12:** Set the negotiated MTU.
-- [ ] **TUN-13:** Bring the interface up.
-- [ ] **TUN-14:** Read back and verify address, MTU, flags, and ifindex.
-- [ ] **TUN-15:** Reject an MTU outside 1112 through 1400 before netlink mutation.
-- [ ] **TUN-16:** Add a method to reduce MTU after PMTU negotiation.
-- [ ] **TUN-17:** Reject an attempted live increase unless the session has an
+- [x] **TUN-12:** Set the negotiated MTU.
+- [x] **TUN-13:** Bring the interface up.
+- [x] **TUN-14:** Read back and verify address, MTU, flags, and ifindex.
+- [x] **TUN-15:** Reject an MTU outside 1112 through 1400 before netlink mutation.
+- [x] **TUN-16:** Add a method to reduce MTU after PMTU negotiation.
+- [x] **TUN-17:** Reject an attempted live increase unless the session has an
   authenticated committed value.
 
 ### Packet I/O
 
-- [ ] **TUN-18:** Read one complete packet into a caller-owned buffer.
-- [ ] **TUN-19:** Distinguish context cancellation from permanent descriptor
+- [x] **TUN-18:** Read one complete packet into a caller-owned buffer.
+- [x] **TUN-19:** Distinguish context cancellation from permanent descriptor
   failure.
-- [ ] **TUN-20:** Reject a read larger than the configured packet buffer.
-- [ ] **TUN-21:** Write one complete packet from a caller-owned buffer.
-- [ ] **TUN-22:** Treat a short TUN write as an error.
-- [ ] **TUN-23:** Return every pooled buffer on read failure.
-- [ ] **TUN-24:** Return every pooled buffer on write failure.
-- [ ] **TUN-25:** Add packet and byte counters without unbounded labels.
+- [x] **TUN-20:** Reject a read larger than the configured packet buffer.
+- [x] **TUN-21:** Write one complete packet from a caller-owned buffer.
+- [x] **TUN-22:** Treat a short TUN write as an error.
+- [x] **TUN-23:** Return every pooled buffer on read failure.
+- [x] **TUN-24:** Return every pooled buffer on write failure.
+- [x] **TUN-25:** Add packet and byte counters without unbounded labels.
 
 ### Integration
 
@@ -633,16 +692,79 @@ Read and write complete IPv4 packets through a safely owned TUN interface.
 - [ ] **TUN-28:** Verify each interface starts at MTU 1180.
 - [ ] **TUN-29:** Pass one plaintext test-only IPv4 packet between a TUN reader
   and an in-memory peer.
-- [ ] **TUN-30:** Guard plaintext forwarding behind an integration-only build
+- [x] **TUN-30:** Guard plaintext forwarding behind an integration-only build
   tag.
-- [ ] **TUN-31:** Assert the release binary contains no plaintext forwarding
+- [x] **TUN-31:** Assert the release binary contains no plaintext forwarding
   switch or subcommand.
 
 ### Gate
 
-- [ ] TUN unit tests pass without root through mocks.
-- [ ] TUN namespace tests pass with root.
+- [x] TUN unit tests pass without root through mocks.
+- [ ] TUN namespace tests pass with root. *(blocked: privileged run — `TestTUNInNamespaces`)*
 - [ ] Descriptor and buffer leak checks pass on every constructor/error path.
+  *(buffer-leak paths TUN-23/24 unit-proven in `internal/tun`
+  `TestReadIntoReleasesBufferOnError` / `TestWriteFromAlwaysReleases`, and
+  release-exactly-once under `-tags debug` in `TestPooledHelpersReleaseExactlyOnce`;
+  the descriptor-leak check on a post-open constructor failure — TUN-09 — is
+  root-gated in `TestOpenClosesFDOnPostOpenFailure`, and the poller-integration
+  checks that Close / context-cancel unblock a parked real read
+  (`TestOpenRealTUNCloseUnblocksParkedRead`,
+  `TestOpenRealTUNContextCancelUnblocksParkedRead`) are root-gated too — all
+  blocked here)*
+
+### Status (2026-09-03)
+
+Landed:
+
+- `internal/tun`: platform-neutral `Device` interface + `Config` + bounded
+  `Stats` + typed errors (`tun.go`); `//go:build !linux` `Open` returning
+  `ErrUnsupported` (`tun_other.go`); Linux `Open` (`tun_linux.go`) that
+  validates the config before any descriptor is opened (name ≤ IFNAMSIZ-1,
+  MTU 1112–1400, IPv4 address), opens `/dev/net/tun` `O_CLOEXEC`, issues
+  `TUNSETIFF` with `IFF_TUN|IFF_NO_PI`, then uses
+  `jsimonetti/rtnetlink` to set MTU + `IFF_UP` and add the address as
+  structured values and read all of it back to verify. Every early return
+  after the descriptor is open closes it. `ReadPacket` takes a caller-owned
+  buffer larger than the max packet, distinguishes context cancellation
+  (`ctx.Err()`, not counted) from a permanent descriptor error, and drops +
+  counts an oversize packet rather than truncating. `WritePacket` treats a
+  short kernel write as `ErrShortWrite`. `SetMTU` reduces freely and refuses
+  an unauthenticated live increase. `Close` is `sync.Once` (one `close(fd)`);
+  the interface is non-persistent by default (v1 never issues `TUNSETPERSIST`,
+  TUN-10) and disappears with the descriptor. `ReadInto` / `WriteFrom`
+  operate on pooled `*packetbuf.Buffer` and release on every error path
+  (TUN-23/24). Counters are a fixed struct of `atomic.Uint64` (TUN-25).
+- Unit tests (`internal/tun`, no root) exercise the read/write/close/SetMTU
+  logic through an injected fake `io.ReadWriteCloser` + fake `linkConfigurer`
+  and cover every error path. `validate` and `guardMTU` are asserted directly
+  (`validate_internal_test.go`); `TestConfigValidationRunsBeforeOpen` proves
+  `Open` runs validation before it touches a descriptor.
+- Integration (`test/integration`, `integration` tag): `tun-plaintext` helper
+  mode opens `red0` inside a namespace, asserts MTU 1180, and moves a real
+  cleartext IPv4/UDP packet from the kernel through a TUN reader to an
+  in-memory peer (`forwardPlaintext`). The forwarder is behind the
+  `integration` build tag (TUN-30) — `go build ./cmd/...` cannot reach it.
+- `cmd/red-mpudp`: `TestNoPlaintextForwardingSubcommand` (no `forward` /
+  `plaintext` subcommand or help text) and `TestReleaseBinaryHasNoForwardingSymbols`
+  (a default-tags `go build` of the CLI contains none of the forwarder's
+  symbols) — TUN-31, both run here.
+
+Dependencies: `jsimonetti/rtnetlink v1.4.2` (+ `mdlayher/netlink v1.7.2`
+base) is now a direct dependency, brought forward from M08 for TUN-11. Adding
+it also completed the deferred `golang.org/x/crypto` + `golang.org/x/sys`
+bump; the Noise vector test was re-run against `x/crypto v0.50.0` and still
+passes. See `docs/development/dependencies.md`.
+
+Blocked on a privileged run (root + `ip`/`tc`/`nft`):
+
+- **TUN-26..29**, the "namespace tests pass with root" gate, the TUN-09
+  descriptor-leak check, and the poller-integration checks
+  (`TestOpenRealTUNCloseUnblocksParkedRead`,
+  `TestOpenRealTUNContextCancelUnblocksParkedRead` — first proof the Go runtime
+  poller accepts the `/dev/net/tun` fd, which both context cancellation and
+  Close rely on). Run `sudo -E env "PATH=$PATH" make test-integration` plus
+  `sudo -E env "PATH=$PATH" /usr/bin/go test ./internal/tun/` and check them
+  off once green.
 
 ### Checkpoint
 

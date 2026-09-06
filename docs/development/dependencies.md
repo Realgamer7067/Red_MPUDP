@@ -43,14 +43,52 @@ it (`BOOT-21`).
 - `MaxNonce = 2^64 - 2`; `ErrMaxNonce` past it. The design closes/rekeys well
   before this, so the ceiling is never reached in normal operation.
 
-**Follow-up (not blocking Phase 0):** `flynn/noise@v1.1.0` pins
-`golang.org/x/crypto v0.0.0-20210322153248` (2021). After the transport
-decision, bump `golang.org/x/crypto` and `golang.org/x/sys` in our own `go.mod`
-to current releases and re-run the Noise vector test.
+**Follow-up — DONE (M06).** The `golang.org/x/crypto` + `golang.org/x/sys`
+bump landed as a side effect of adding `jsimonetti/rtnetlink` in M06:
+`x/crypto v0.0.0-2021… → v0.50.0`, `x/sys v0.0.0-2020… → v0.43.0`,
+`x/net → v0.52.0`. The Noise vector test (`internal/noisehandshake`,
+`cacophony.txt`) was re-run against `x/crypto v0.50.0` and still passes
+byte-for-byte.
 
-### golang.org/x/crypto, golang.org/x/sys — transitive only
+### golang.org/x/sys — direct as of M05
 
-Pulled in by `flynn/noise`. Not imported directly yet. BSD-3-Clause.
+`golang.org/x/sys/unix` is used by `test/integration` for the `Capget`
+CAP_NET_ADMIN preflight check (HARNESS-03) and by `internal/tun` for
+`/dev/net/tun` open + the `TUNSETIFF` ioctl (M06). BSD-3-Clause.
+**Version:** `v0.43.0`.
+
+### golang.org/x/crypto — transitive only
+
+Pulled in by `flynn/noise` and the `mdlayher` netlink stack. Not imported
+directly. BSD-3-Clause. **Version:** `v0.50.0`.
+
+### github.com/jsimonetti/rtnetlink — structured netlink (M06)
+
+| | |
+|---|---|
+| Version pinned | `v1.4.2` (with `github.com/mdlayher/netlink v1.7.2` base, indirect) |
+| Capability | typed `RTM_SETLINK` (MTU, `IFF_UP`) and `RTM_NEWADDR`/`RTM_GETADDR` for `internal/tun` interface configuration and readback (TUN-11..14); the full route/rule/monitor surface is used from M08 |
+| License | MIT (rtnetlink), MIT (mdlayher/netlink, mdlayher/socket) |
+| Transitive | `github.com/josharian/native`, `golang.org/x/net`, `golang.org/x/sync`, `github.com/google/go-cmp` |
+
+**Status:** direct dependency as of M06 (was planned for M08). Brought forward
+because TUN-11 requires structured netlink values for address configuration and
+hand-rolling `RTM_*` messages is error-prone. Re-confirmed against the `v1.4.2`
+API: `rtnetlink.Dial(nil)` → `conn.Link.Set` / `conn.Link.Get` /
+`conn.Address.New` / `conn.Address.List`.
+
+### github.com/goccy/go-yaml — strict YAML config parsing (M04)
+
+| | |
+|---|---|
+| Version pinned | `v1.19.2` |
+| Capability | `yaml.DisallowUnknownField()` (CONF-06); duplicate map keys rejected by default unless `AllowDuplicateMapKey()` is passed, which it is not (CONF-07); `encoding.TextUnmarshaler` support so `net/netip` types parse directly (CONF-05) |
+| License | MIT |
+| Transitive | none beyond the standard library and `golang.org/x/*` already present |
+
+**Status:** direct dependency as of M04; imported by `internal/config`. Re-confirmed
+against the `v1.19.2` API: `yaml.NewDecoder(r, yaml.DisallowUnknownField())`, a
+second `Decode` call is used to reject multi-document input.
 
 ## Selected but not yet imported (SPIKE-06)
 
@@ -59,8 +97,6 @@ each choice is re-confirmed against its API at that point.
 
 | Capability | Package | Milestone | Notes / alternative |
 |---|---|---|---|
-| YAML config parsing, strict (reject unknown + duplicate keys) | `github.com/goccy/go-yaml` | M04 | Actively maintained, has strict decoding. Alternative: `gopkg.in/yaml.v3` (KnownFields + duplicate-key error) but effectively frozen. |
-| rtnetlink: links, addresses, routes, rules, monitor | `github.com/jsimonetti/rtnetlink` (+ `github.com/mdlayher/netlink` base) | M08 | Maintained, typed, supports `RTM_*RULE` and multicast monitor. Alternative: `github.com/vishvananda/netlink` (more complete, less clean error model). |
 | nftables transactions (named table install / reconcile / remove) | `github.com/google/nftables` | M08, M20 | Netlink-based, supports atomic batches; no shelling out to `nft`. |
 | systemd-resolved D-Bus client | `github.com/godbus/dbus/v5` | M20 | Standard Go D-Bus binding; call `org.freedesktop.resolve1` directly. |
 | Prometheus text metrics + registry | `github.com/prometheus/client_golang` | M21 | Use a private `prometheus.NewRegistry()`, not the default global. |
