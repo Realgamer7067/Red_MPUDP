@@ -28,11 +28,19 @@ func requireBinary(t testing.TB, name string) {
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
+	// inWrite, when non-nil, is called while the mutex is held, so a test can
+	// hold a writer inside the critical section and observe that a concurrent
+	// String blocks. It is nil on every buffer the helpers construct, so
+	// production behaviour is a plain lock/write/unlock.
+	inWrite func()
 }
 
 func (b *syncBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.inWrite != nil {
+		b.inWrite()
+	}
 	return b.buf.Write(p)
 }
 

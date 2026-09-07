@@ -59,6 +59,16 @@ var _ transport.DatagramIO = (*Client)(nil)
 //
 // Every failure after the descriptor exists closes it before returning.
 func Dial(cfg ClientConfig) (*Client, error) {
+	return dial(cfg, unix.Connect)
+}
+
+// connectFunc is connect(2). dial takes it as a parameter rather than reading a
+// package variable so a test can supply a stub for its own call only: a mutable
+// global seam would be shared by every concurrent Dial in the process, which is
+// exactly the kind of cross-test interference this package must not have.
+type connectFunc func(fd int, sa unix.Sockaddr) error
+
+func dial(cfg ClientConfig, connect connectFunc) (*Client, error) {
 	if !cfg.Server.IsValid() || !cfg.Server.Addr().Is4() {
 		return nil, fmt.Errorf("udp: server %s must be a valid IPv4 endpoint", cfg.Server)
 	}
@@ -133,7 +143,7 @@ func Dial(cfg ClientConfig) (*Client, error) {
 	}
 	// UDP-16: connect to the literal server endpoint, so the kernel filters
 	// sources for us and synchronous errors are attributable to this path.
-	if err := connectSyscall(fd, &unix.SockaddrInet4{
+	if err := connect(fd, &unix.SockaddrInet4{
 		Addr: cfg.Server.Addr().As4(),
 		Port: int(cfg.Server.Port()),
 	}); err != nil {

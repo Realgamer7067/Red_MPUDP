@@ -29,15 +29,17 @@ func TestDialMapsInterfaceDisappearanceOnConnect(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.errno.Error(), func(t *testing.T) {
-			real := connectSyscall
-			t.Cleanup(func() { connectSyscall = real })
+			// The stub is passed to this dial call alone, so it cannot disturb
+			// any other Dial in the process. These subtests still run
+			// sequentially: the descriptor check below compares fd numbers,
+			// which the kernel reuses as soon as another socket is opened.
 			captured := -1
-			connectSyscall = func(fd int, _ unix.Sockaddr) error {
+			connect := func(fd int, _ unix.Sockaddr) error {
 				captured = fd
 				return tc.errno
 			}
 
-			c, err := Dial(ClientConfig{Server: netip.MustParseAddrPort("127.0.0.1:9")})
+			c, err := dial(ClientConfig{Server: netip.MustParseAddrPort("127.0.0.1:9")}, connect)
 			if err == nil {
 				c.Close()
 				t.Fatalf("Dial succeeded despite connect returning %v", tc.errno)

@@ -93,7 +93,3 @@ func validateIfIndex(idx int) error {
 	}
 	return nil
 }
-
-// connectSyscall is a seam so a test can force connect(2) to fail with the
-// errnos an interface removal produces, without needing CAP_NET_ADMIN.
-var connectSyscall = func(fd int, sa unix.Sockaddr) error { return unix.Connect(fd, sa) }
