@@ -47,8 +47,10 @@ func TestHelperOutputIsSafeToPollWhileRunning(t *testing.T) {
 	waited := make(chan struct{})
 	t.Cleanup(func() {
 		// Never leave the child parked in Write, even on a failure path, or
-		// cmd.Wait would block forever.
-		once.Do(func() {})
+		// cmd.Wait would block forever. Releasing must come first and must not
+		// go through once: on a failed assertion the copy goroutine is still
+		// inside once.Do, so a second once.Do here would wait on the very
+		// goroutine this cleanup exists to free.
 		releaseWriter()
 		<-waited
 	})
