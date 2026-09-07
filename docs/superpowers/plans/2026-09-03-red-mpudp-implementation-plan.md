@@ -1052,6 +1052,11 @@ Blocked on a privileged run (root + `ip`/`tcpdump`):
 > type-checked and compiled (including under `-race`) but **never executed**.
 > `go test ./...` and `go test -race ./...` do not even compile that tag.
 >
+> One exception now exists: `TestHelperOutputIsSafeToPollWhileRunning` needs no
+> namespace and no capabilities, so it *does* execute under
+> `go test -race -tags integration ./test/...`. It is the only tagged test that
+> has ever run here, and it covers only the helper output collector.
+>
 > That is precisely why the UDP-45 and UDP-46 defects survived the green test
 > matrix of the previous revision: no amount of unprivileged repetition can
 > exercise code that never runs. Treat every claim about UDP-41..46, the

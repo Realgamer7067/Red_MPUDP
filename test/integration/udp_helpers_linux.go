@@ -21,12 +21,33 @@ func requireBinary(t testing.TB, name string) {
 	}
 }
 
+// syncBuffer collects a child process's output safely. os/exec writes into a
+// non-*os.File Stdout from its own copying goroutine, so a test that polls the
+// buffer for a readiness line while the child is still running races that
+// goroutine. Every read and write goes through the mutex.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 // capture is a running tcpdump watching one interface for outbound UDP to a
 // port. It exists so a test can assert both that a datagram appeared on the
 // intended interface and that none appeared on the other one.
 type capture struct {
 	cmd  *exec.Cmd
-	out  *bytes.Buffer
+	out  *syncBuffer
 	dev  string
 	stop func()
 }
@@ -34,7 +55,7 @@ type capture struct {
 // startCapture begins capturing outbound UDP to dstPort on dev inside ns.
 func startCapture(t testing.TB, ns, dev string, dstPort int) *capture {
 	t.Helper()
-	buf := &bytes.Buffer{}
+	buf := &syncBuffer{}
 	cmd := exec.Command("ip", "netns", "exec", ns,
 		"tcpdump", "-n", "-l", "-i", dev, "--immediate-mode", "-Q", "out",
 		fmt.Sprintf("udp dst port %d", dstPort))
@@ -89,14 +110,14 @@ func ipNS(ns string, args ...string) error { return ipIn(ns, args...) }
 // helperProc is a spawned helper whose output the test inspects on exit.
 type helperProc struct {
 	cmd  *exec.Cmd
-	out  *bytes.Buffer
+	out  *syncBuffer
 	once sync.Once
 }
 
 // spawnHelper starts a helper mode in a namespace without waiting for it.
 func (top *Topology) spawnHelper(t testing.TB, ns, mode, arg string) *helperProc {
 	t.Helper()
-	buf := &bytes.Buffer{}
+	buf := &syncBuffer{}
 	cmd := helperCmd(ns, mode, arg)
 	cmd.Stdout = buf
 	cmd.Stderr = buf

@@ -133,12 +133,23 @@ func Dial(cfg ClientConfig) (*Client, error) {
 	}
 	// UDP-16: connect to the literal server endpoint, so the kernel filters
 	// sources for us and synchronous errors are attributable to this path.
-	if err := unix.Connect(fd, &unix.SockaddrInet4{
+	if err := connectSyscall(fd, &unix.SockaddrInet4{
 		Addr: cfg.Server.Addr().As4(),
 		Port: int(cfg.Server.Port()),
 	}); err != nil {
+		// The interface can be removed after SO_BINDTODEVICE succeeded. The
+		// kernel reports that as ENODEV/ENXIO, which is a disappearance rather
+		// than a routing failure, so it maps to ErrInterfaceGone too (UDP-11).
+		via := ""
+		if cfg.Interface != "" {
+			via = " via " + cfg.Interface
+		}
+		if errors.Is(err, unix.ENODEV) || errors.Is(err, unix.ENXIO) {
+			return fail("%w: outbound device%s went away before connect to %s: %w",
+				ErrInterfaceGone, via, cfg.Server, err)
+		}
 		if errors.Is(err, unix.ENETUNREACH) || errors.Is(err, unix.EADDRNOTAVAIL) {
-			return fail("%w: no route to %s from %s: %w", ErrInterfaceGone, cfg.Server, cfg.Interface, err)
+			return fail("%w: no route to %s%s: %w", ErrInterfaceGone, cfg.Server, via, err)
 		}
 		return fail("udp: connect %s: %w", cfg.Server, err)
 	}
